@@ -1,0 +1,80 @@
+/*
+ * globals.css - minimal base only.
+ * The full design-token system (color scale, type scale, spacing, primitives)
+ * arrives in Step 2. Keep this file small: reset + page ground + base type.
+ *
+ * Design rules carried through the whole app:
+ *   - No rounded corners (square edges, 田字格 grid language).
+ *   - No pill / gradient buttons or big centered bold headings.
+ *   - Chinese typography rendered natively (Songti SC / PingFang SC).
+ */
+
+/* --- reset --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* --- placeholder ground (superseded by tokens in Step 2) --- */
+:root {
+  --paper: #ece9e0;
+  --ink: #1b1e24;
+  --ink-2: #565a63;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-song: "Songti SC", "Song", "STSong", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #15171c;
+    --ink: #e9e5d9;
+    --ink-2: #a7a79c;
+  }
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --- clean-slate placeholder (removed in Step 3) --- */
+.app-blank {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+
+.app-blank__mark {
+  margin: 0;
+  font-family: var(--font-song);
+  font-size: clamp(3rem, 12vw, 6rem);
+  letter-spacing: 0.08em;
+}
+
+.app-blank__sub {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}

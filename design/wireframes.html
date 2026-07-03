@@ -1,0 +1,372 @@
+<style>
+  :root{
+    /* paper / light */
+    --paper:#ECE9E0; --paper-2:#E4E0D5; --card:#F3F1EA;
+    --ink:#1B1E24; --ink-2:#565A63; --ink-3:#8A8D93;
+    --line:#CFCabb; --line:#CDC9BC;
+    --correction:#BB3B2E;   /* red pen: AI + corrections */
+    --jade:#4E7C6B;         /* progress / correct */
+    --grid:#C9C4B4;         /* 田字格 guides */
+    --radius:7px;
+    --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --font-hei:"PingFang SC","Heiti SC",-apple-system,sans-serif;
+    --font-song:"Songti SC","Song","STSong",serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#15171C; --paper-2:#1C1F26; --card:#1F232B;
+      --ink:#E9E5D9; --ink-2:#A7A79C; --ink-3:#6E7178;
+      --line:#2C3038; --correction:#DF6E60; --jade:#74A88F; --grid:#31353E;
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#ECE9E0; --paper-2:#E4E0D5; --card:#F3F1EA;
+    --ink:#1B1E24; --ink-2:#565A63; --ink-3:#8A8D93;
+    --line:#CDC9BC; --correction:#BB3B2E; --jade:#4E7C6B; --grid:#C9C4B4;
+  }
+  :root[data-theme="dark"]{
+    --paper:#15171C; --paper-2:#1C1F26; --card:#1F232B;
+    --ink:#E9E5D9; --ink-2:#A7A79C; --ink-3:#6E7178;
+    --line:#2C3038; --correction:#DF6E60; --jade:#74A88F; --grid:#31353E;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .wrap{
+    background:var(--paper); color:var(--ink);
+    font-family:var(--font-ui); line-height:1.55;
+    -webkit-font-smoothing:antialiased; padding:0 0 6rem;
+  }
+  .col{max-width:1080px; margin:0 auto; padding:0 clamp(1.1rem,4vw,2.4rem)}
+  a{color:inherit}
+
+  /* ---- masthead ---- */
+  .mast{border-bottom:1px solid var(--line); padding:2.6rem 0 2.2rem; position:relative}
+  .kicker{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--ink-2)}
+  .mast h1{font-size:clamp(2.2rem,6vw,3.7rem); line-height:1.02; margin:.5rem 0 .1rem;
+    font-weight:680; letter-spacing:-.02em; text-wrap:balance}
+  .mast h1 .zh{font-family:var(--font-song); font-weight:600; margin-right:.15em}
+  .mast .sub{color:var(--ink-2); max-width:56ch; font-size:1.02rem; margin-top:.7rem}
+  .mast .tian-mark{position:absolute; top:2.4rem; right:0; width:78px; height:78px}
+
+  /* 田字格 primitive */
+  .tian{position:relative; border:1.5px solid var(--grid); background:var(--card)}
+  .tian::before,.tian::after{content:""; position:absolute; background:transparent}
+  .tian::before{left:50%; top:6%; bottom:6%; border-left:1px dashed var(--grid); transform:translateX(-.5px)}
+  .tian::after{top:50%; left:6%; right:6%; border-top:1px dashed var(--grid); transform:translateY(-.5px)}
+
+  h2.sec{font-size:.78rem; font-family:var(--font-mono); letter-spacing:.2em;
+    text-transform:uppercase; color:var(--ink-2); margin:3.4rem 0 1.3rem;
+    padding-bottom:.5rem; border-bottom:1px solid var(--line); display:flex; gap:.7rem; align-items:baseline}
+  h2.sec b{color:var(--correction); font-weight:600}
+
+  /* ---- design tokens showcase ---- */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:1.4rem}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:1.2rem 1.3rem}
+  .panel h3{margin:.1rem 0 .8rem; font-size:.95rem; font-weight:640}
+  .swatches{display:flex; flex-wrap:wrap; gap:.6rem}
+  .sw{flex:1 1 84px; min-width:84px}
+  .sw .chip{height:46px; border-radius:5px; border:1px solid rgba(0,0,0,.12)}
+  .sw small{display:block; font-family:var(--font-mono); font-size:.66rem; color:var(--ink-2); margin-top:.35rem}
+  .sw b{display:block; font-size:.74rem; margin-top:.05rem}
+
+  .specimen .big{font-family:var(--font-song); font-size:3.3rem; line-height:1; letter-spacing:.04em}
+  .specimen .py{font-family:var(--font-mono); color:var(--jade); font-size:.9rem; margin-top:.5rem; letter-spacing:.02em}
+  .specimen .row{display:flex; gap:1.1rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:1rem}
+  .specimen dl{margin:.9rem 0 0; display:grid; grid-template-columns:auto 1fr; gap:.35rem .9rem; font-size:.82rem}
+  .specimen dt{font-family:var(--font-mono); color:var(--ink-2); font-size:.72rem; align-self:center}
+
+  .avoid{list-style:none; padding:0; margin:.2rem 0 0; font-size:.86rem}
+  .avoid li{padding:.4rem 0; border-bottom:1px dashed var(--line); display:flex; gap:.7rem}
+  .avoid li:last-child{border-bottom:0}
+  .avoid .x{color:var(--correction); font-weight:700}
+  .avoid .y{color:var(--jade); font-weight:700}
+
+  /* ---- wireframes ---- */
+  .frames{display:grid; grid-template-columns:1fr 1fr; gap:1.6rem}
+  @media(max-width:800px){.frames{grid-template-columns:1fr}}
+  .frame{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; display:flex; flex-direction:column}
+  .frame > figcaption{display:flex; gap:.6rem; align-items:baseline; padding:.7rem .95rem; border-bottom:1px solid var(--line); background:var(--paper-2)}
+  .frame figcaption .n{font-family:var(--font-mono); font-size:.7rem; color:var(--ink-3)}
+  .frame figcaption b{font-size:.9rem; font-weight:640}
+  .frame figcaption .zh{font-family:var(--font-song); color:var(--ink-2); font-size:.85rem; margin-left:auto}
+  .screen{padding:.95rem; flex:1; min-height:230px; display:flex; flex-direction:column; gap:.6rem}
+  .note{font-size:.78rem; color:var(--ink-2); padding:.75rem .95rem; border-top:1px dashed var(--line)}
+  .note b{color:var(--ink)}
+
+  /* wireframe atoms (deliberately low-fi: ink outlines on paper) */
+  .bar{height:9px; background:var(--line); border-radius:3px}
+  .bar.s{width:40%} .bar.m{width:65%} .bar.l{width:88%}
+  .box{border:1px dashed var(--line); border-radius:5px; background:var(--paper)}
+  .pad{padding:.6rem .7rem}
+  .rowx{display:flex; gap:.55rem; align-items:center}
+  .between{display:flex; justify-content:space-between; align-items:center; gap:.6rem}
+  .tag{font-family:var(--font-mono); font-size:.64rem; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-2); border:1px solid var(--line); border-radius:20px; padding:.12rem .5rem}
+  .tag.red{color:var(--correction); border-color:color-mix(in srgb,var(--correction) 45%,var(--line))}
+  .tag.jade{color:var(--jade); border-color:color-mix(in srgb,var(--jade) 45%,var(--line))}
+  .btn{font-size:.72rem; border:1px solid var(--ink); border-radius:5px; padding:.32rem .7rem; text-align:center; color:var(--ink)}
+  .btn.fill{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+  .btn.jade{background:var(--jade); border-color:var(--jade); color:#fff}
+  .btn.ghost{border-style:dashed}
+
+  .ring{width:52px; height:52px; border-radius:50%; display:grid; place-items:center;
+    background:conic-gradient(var(--jade) var(--p,62%), var(--line) 0);
+    font-family:var(--font-mono); font-size:.62rem}
+  .ring i{width:40px;height:40px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-style:normal;color:var(--ink)}
+  .rings{display:flex; gap:.7rem; flex-wrap:wrap}
+
+  /* reader */
+  .passage{font-family:var(--font-song); font-size:1.45rem; line-height:2; letter-spacing:.02em}
+  .passage .t1{color:#c0392b}.passage .t2{color:#1f8a4c}.passage .t3{color:#2b6cb0}.passage .t4{color:#7048b6}
+  @media (prefers-color-scheme:dark){.passage .t1{color:#e2796b}.passage .t2{color:#5cc98a}.passage .t3{color:#6ea8e6}.passage .t4{color:#a488e6}}
+  .passage u{text-decoration:none; border-bottom:2px solid var(--correction); cursor:pointer}
+  .pop{border:1px solid var(--ink); border-radius:6px; background:var(--card); padding:.6rem .75rem; box-shadow:3px 3px 0 var(--line); max-width:230px}
+  .pop .h{font-family:var(--font-song); font-size:1.5rem; line-height:1}
+  .pop .py{font-family:var(--font-mono); color:var(--jade); font-size:.75rem}
+  .pop .df{font-size:.78rem; color:var(--ink-2); margin-top:.3rem}
+
+  /* writing 田字格 big */
+  .practice{display:grid; grid-template-columns:120px 1fr; gap:.9rem; align-items:start}
+  @media(max-width:520px){.practice{grid-template-columns:1fr}}
+  .bigtian{width:120px; height:120px; display:grid; place-items:center}
+  .bigtian .ch{font-family:var(--font-song); font-size:4.6rem; line-height:1; color:var(--ink-3)}
+  .bigtian .ch.trace{color:var(--ink)}
+  .stroke-ctl{display:flex; gap:.4rem; flex-wrap:wrap}
+  .aifeed{border:1px solid color-mix(in srgb,var(--correction) 35%,var(--line)); border-left:3px solid var(--correction);
+    border-radius:5px; padding:.55rem .7rem; background:color-mix(in srgb,var(--correction) 7%,var(--card))}
+  .aifeed .lbl{font-family:var(--font-mono); font-size:.62rem; text-transform:uppercase; letter-spacing:.1em; color:var(--correction)}
+  .aifeed p{margin:.25rem 0 0; font-size:.8rem; color:var(--ink)}
+
+  /* notebook margin insight */
+  .nb{display:grid; grid-template-columns:1fr 150px; gap:.8rem}
+  @media(max-width:520px){.nb{grid-template-columns:1fr}}
+  .nb .marginline{border-left:2px solid var(--correction); padding-left:.7rem; display:flex; flex-direction:column; gap:.5rem}
+  .hl{background:color-mix(in srgb,var(--correction) 16%,transparent); border-radius:2px; padding:0 .1em}
+
+  /* review */
+  .flash{border:1px solid var(--line); border-radius:8px; background:var(--paper); padding:1.4rem; text-align:center; display:flex; flex-direction:column; gap:.5rem; align-items:center}
+  .flash .ch{font-family:var(--font-song); font-size:3.4rem; line-height:1}
+  .grade{display:grid; grid-template-columns:repeat(4,1fr); gap:.45rem}
+  .grade .g{font-size:.68rem; text-align:center; border:1px solid var(--line); border-radius:5px; padding:.4rem .2rem; font-family:var(--font-mono)}
+  .grade .g small{display:block; color:var(--ink-3); font-size:.6rem}
+
+  /* speaking */
+  .wave{height:40px; display:flex; align-items:center; gap:2px; padding:0 .4rem; border:1px dashed var(--line); border-radius:5px}
+  .wave i{flex:1; background:var(--jade); border-radius:2px; opacity:.75}
+  .tones{display:flex; gap:.4rem; font-family:var(--font-mono); font-size:.66rem}
+  .tones span{border:1px solid var(--line); border-radius:4px; padding:.15rem .4rem}
+  .tones .ok{color:var(--jade); border-color:color-mix(in srgb,var(--jade) 40%,var(--line))}
+  .tones .bad{color:var(--correction); border-color:color-mix(in srgb,var(--correction) 40%,var(--line))}
+
+  .nav-rail{display:flex; gap:.3rem; flex-direction:column; font-size:.72rem; color:var(--ink-2)}
+  .foot{margin-top:3.5rem; padding-top:1.4rem; border-top:1px solid var(--line); font-size:.8rem; color:var(--ink-2)}
+  .foot code{font-family:var(--font-mono); background:var(--paper-2); padding:.05rem .35rem; border-radius:4px}
+</style>
+
+<div class="wrap">
+  <div class="col">
+
+    <header class="mast">
+      <div class="kicker">Design direction · Wireframes v0.1</div>
+      <h1><span class="zh">龙虾</span>Lóngxiā - a Chinese study app</h1>
+      <p class="sub">Reading, writing &amp; speaking on the HSK 3.0 spine - with a real notebook,
+        interactive 田字格 practice, and a red-pen AI that annotates exactly what you point at.</p>
+      <div class="tian tian-mark" aria-hidden="true"></div>
+    </header>
+
+    <!-- ============ DESIGN LANGUAGE ============ -->
+    <h2 class="sec">01 · Design language <b>not another card-and-gradient app</b></h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Palette - paper, ink, one red pen</h3>
+        <div class="swatches">
+          <div class="sw"><div class="chip" style="background:#ECE9E0"></div><b>Paper</b><small>#ECE9E0</small></div>
+          <div class="sw"><div class="chip" style="background:#1B1E24"></div><b>Ink</b><small>#1B1E24</small></div>
+          <div class="sw"><div class="chip" style="background:#BB3B2E"></div><b>Correction</b><small>#BB3B2E</small></div>
+          <div class="sw"><div class="chip" style="background:#4E7C6B"></div><b>Jade</b><small>#4E7C6B</small></div>
+          <div class="sw"><div class="chip" style="background:#C9C4B4"></div><b>Grid</b><small>#C9C4B4</small></div>
+        </div>
+        <p style="font-size:.82rem;color:var(--ink-2);margin:.9rem 0 0">
+          Red appears <b style="color:var(--correction)">only</b> for AI insight &amp; corrections - the
+          teacher's pen. Jade means progress &amp; correct. Everything else is quiet ink on paper.</p>
+      </div>
+
+      <div class="panel specimen">
+        <h3>Type - Chinese typography, rendered natively</h3>
+        <div class="row">
+          <div>
+            <div class="big">学</div>
+            <div class="py">xué · to study</div>
+          </div>
+          <div style="flex:1">
+            <dl>
+              <dt>Display</dt><dd style="font-family:var(--font-song)">Songti SC 宋体 - characters</dd>
+              <dt>UI</dt><dd style="font-family:var(--font-hei)">PingFang SC - interface text</dd>
+              <dt>Data</dt><dd style="font-family:var(--font-mono)">SF Mono - pinyin, counts</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>The motif - 田字格</h3>
+        <div class="rowx" style="gap:1rem">
+          <div class="tian" style="width:66px;height:66px;flex:0 0 auto"></div>
+          <p style="font-size:.84rem;color:var(--ink-2);margin:0">
+            The practice grid is the app's structural signature - background of every writing
+            surface, the app mark, the loading state. Unmistakably Chinese handwriting; impossible
+            to mistake for a generic SaaS template.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>What we're deliberately avoiding</h3>
+        <ul class="avoid">
+          <li><span class="x">Avoid</span> Purple→blue gradient hero, glassmorphism, drop-shadow card soup</li>
+          <li><span class="x">Avoid</span> Inter/Space-Grotesk default, emoji section headers, everything centered</li>
+          <li><span class="x">Avoid</span> The cream + serif + terracotta "AI editorial" cliché</li>
+          <li><span class="y">Prefer</span> Ruled-notebook layout, editorial column, semantic color only</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============ WIREFRAMES ============ -->
+    <h2 class="sec">02 · Wireframes <b>six core screens</b></h2>
+    <div class="frames">
+
+      <!-- 1 HOME -->
+      <figure class="frame">
+        <figcaption><span class="n">1</span><b>Today</b><span class="zh">今天</span></figcaption>
+        <div class="screen">
+          <div class="between">
+            <div class="bar s"></div><span class="tag jade">7-day streak</span>
+          </div>
+          <div class="box pad">
+            <div class="between" style="margin-bottom:.6rem"><small style="font-family:var(--font-mono);color:var(--ink-2)">HSK PROGRESS</small><span class="tag">Level 3</span></div>
+            <div class="rings">
+              <div class="ring" style="--p:74%"><i>汉字</i></div>
+              <div class="ring" style="--p:58%"><i>词语</i></div>
+              <div class="ring" style="--p:41%"><i>语法</i></div>
+              <div class="ring" style="--p:66%"><i>音节</i></div>
+            </div>
+          </div>
+          <div class="box pad between">
+            <div><div class="bar m" style="margin-bottom:.4rem"></div><small style="color:var(--ink-2);font-size:.72rem">18 cards due · 6 new</small></div>
+            <span class="btn fill">Review</span>
+          </div>
+          <div class="rowx"><span class="btn ghost">Read</span><span class="btn ghost">Write</span><span class="btn ghost">Speak</span></div>
+        </div>
+        <figcaption class="note"><b>Summary before detail:</b> level rings, due count, and one primary action. Left margin rule carries the nav on wider screens.</figcaption>
+      </figure>
+
+      <!-- 2 READER -->
+      <figure class="frame">
+        <figcaption><span class="n">2</span><b>Reader</b><span class="zh">阅读</span></figcaption>
+        <div class="screen">
+          <div class="between"><span class="tag">Graded · L3</span><span class="tag red">Explain</span></div>
+          <div class="passage">我们<u>周末</u>一起去<span class="t1">图</span><span class="t2">书</span><span class="t3">馆</span><span class="t4">看</span>书。</div>
+          <div class="pop">
+            <div class="between"><div class="h">周末</div><span class="btn" style="font-size:.6rem;padding:.15rem .4rem">+ Card</span></div>
+            <div class="py">zhōumò</div>
+            <div class="df">weekend · noun · HSK 2</div>
+          </div>
+        </div>
+        <figcaption class="note"><b>Tap any character</b> → dictionary + pinyin + one-tap "send to SRS". Tone-colored text; "Explain" sends the sentence to the red-pen AI.</figcaption>
+      </figure>
+
+      <!-- 3 WRITING -->
+      <figure class="frame">
+        <figcaption><span class="n">3</span><b>Writing</b><span class="zh">书写</span></figcaption>
+        <div class="screen">
+          <div class="practice">
+            <div class="tian bigtian"><span class="ch trace">写</span></div>
+            <div style="display:flex;flex-direction:column;gap:.55rem">
+              <div class="between"><span class="tag">Stroke 5 / 5</span><span class="tag jade">handwrite set</span></div>
+              <div class="stroke-ctl"><span class="btn">Animate</span><span class="btn">Trace</span><span class="btn ghost">Free</span></div>
+              <div class="aifeed">
+                <div class="lbl">AI · structure</div>
+                <p>横 is a touch steep - keep the top stroke level and give 冖 more width.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="note"><b>田字格 canvas:</b> animate → guided trace → free-draw quiz. Rust matches your strokes; the AI critiques balance from the rendered image.</figcaption>
+      </figure>
+
+      <!-- 4 NOTEBOOK -->
+      <figure class="frame">
+        <figcaption><span class="n">4</span><b>Notebook</b><span class="zh">笔记</span></figcaption>
+        <div class="screen">
+          <div class="nb">
+            <div style="display:flex;flex-direction:column;gap:.5rem">
+              <div class="bar l"></div>
+              <p style="font-size:.86rem;margin:0;line-height:1.7">把 sentences use the pattern
+                <span class="hl">把 + object + verb + result</span>. Example noted in class today.</p>
+              <div class="bar m"></div>
+            </div>
+            <div class="marginline">
+              <span class="tag red" style="align-self:flex-start">AI insight</span>
+              <p style="font-size:.75rem;margin:0;color:var(--ink-2)">把 fronts the object so the verb can show what <i>happens to</i> it. Needs a resultative ending.</p>
+              <span class="btn ghost" style="align-self:flex-start;font-size:.62rem">+ Card</span>
+            </div>
+          </div>
+          <div class="box pad rowx" style="gap:.5rem"><span class="tag">text</span><span class="tag">drawing</span><span class="tag">card</span></div>
+        </div>
+        <figcaption class="note"><b>Highlight → red-pen AI in the margin</b>, bound to that exact span. Notes mix typed text, drawn characters &amp; saved cards; any block → SRS.</figcaption>
+      </figure>
+
+      <!-- 5 REVIEW -->
+      <figure class="frame">
+        <figcaption><span class="n">5</span><b>Review</b><span class="zh">复习</span></figcaption>
+        <div class="screen">
+          <div class="between"><span class="tag">FSRS queue</span><span class="tag" style="font-family:var(--font-mono)">12 left</span></div>
+          <div class="flash">
+            <div class="ch">复习</div>
+            <div style="font-family:var(--font-mono);color:var(--jade);font-size:.82rem">fùxí</div>
+            <div style="font-size:.78rem;color:var(--ink-2)">to review · revise</div>
+          </div>
+          <div class="grade">
+            <div class="g" style="color:var(--correction)">Again<small>&lt;1m</small></div>
+            <div class="g">Hard<small>2d</small></div>
+            <div class="g" style="color:var(--jade)">Good<small>6d</small></div>
+            <div class="g">Easy<small>14d</small></div>
+          </div>
+        </div>
+        <figcaption class="note"><b>One scheduler, per-skill templates:</b> the same word tests reading (recognize) and writing (produce). Intervals from the FSRS core in Rust.</figcaption>
+      </figure>
+
+      <!-- 6 SPEAKING -->
+      <figure class="frame">
+        <figcaption><span class="n">6</span><b>Speaking</b><span class="zh">口语</span></figcaption>
+        <div class="screen">
+          <div class="between"><span class="tag">Shadowing</span><span class="tag">TTS ►</span></div>
+          <div class="box pad">
+            <div style="font-family:var(--font-song);font-size:1.4rem">你好，很高兴认识你。</div>
+            <div style="font-family:var(--font-mono);color:var(--ink-2);font-size:.74rem;margin-top:.3rem">nǐ hǎo, hěn gāoxìng rènshi nǐ</div>
+          </div>
+          <div class="wave">
+            <i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:90%"></i><i style="height:55%"></i><i style="height:75%"></i><i style="height:35%"></i><i style="height:60%"></i><i style="height:80%"></i><i style="height:40%"></i>
+          </div>
+          <div class="between">
+            <div class="tones"><span class="ok">nǐ</span><span class="ok">hǎo</span><span class="bad">gāo</span><span>xìng</span></div>
+            <span class="btn fill">● Record</span>
+          </div>
+        </div>
+        <figcaption class="note"><b>Tone-level feedback:</b> record, then per-syllable scoring flags the tone you missed. Advanced (7–9) speaking stays flexible - official format isn't public yet.</figcaption>
+      </figure>
+
+    </div>
+
+    <div class="foot">
+      <p><b>Next after sign-off:</b> scaffold the Tauri 2.0 + React + Rust project, wire the SQLite schema
+      from <code>PLAN.md</code>, and stub the <b>Today</b> screen against this language.
+      In-app AI defaults to <code>claude-haiku-4-5</code> (cheapest) with an opt-in bump for writing critique.</p>
+      <p style="color:var(--ink-3);margin-top:.6rem">Wireframes are low-fidelity - structure &amp; visual language, not final pixels. Toggle your theme; both are designed.</p>
+    </div>
+
+  </div>
+</div>
