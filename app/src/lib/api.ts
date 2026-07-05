@@ -44,3 +44,31 @@ export interface Annotated {
 export function annotate(text: string): Promise<Annotated[]> {
   return invoke<Annotated[]>("annotate", { text });
 }
+
+export interface ReviewCard {
+  id: number;
+  headword: string;
+  pinyin: string | null;
+  gloss: string | null;
+  /** Seconds until due for each rating. */
+  again: number;
+  hard: number;
+  good: number;
+  easy: number;
+}
+
+export interface ReviewResult {
+  due: number;
+  state: string;
+}
+
+/** Rating values match the Rust side: 1=Again, 2=Hard, 3=Good, 4=Easy. */
+export type Rating = 1 | 2 | 3 | 4;
+
+export function getReviewQueue(): Promise<ReviewCard[]> {
+  return invoke<ReviewCard[]>("get_review_queue");
+}
+
+export function reviewCard(cardId: number, rating: Rating): Promise<ReviewResult> {
+  return invoke<ReviewResult>("review_card", { cardId, rating });
+}

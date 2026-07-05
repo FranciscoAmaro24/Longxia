@@ -2,11 +2,22 @@
 //! The connection is held behind a Mutex in Tauri managed state; all access
 //! goes through typed commands.
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::AppResult;
+
+/// Bump to re-seed the demo review deck.
+const REVIEW_SEED_VERSION: &str = "review-seed-1";
+
+fn now_secs() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
 
 /// Managed state wrapper around the single app connection.
 pub struct Db(pub Mutex<Connection>);
@@ -23,8 +34,30 @@ pub fn init(path: &Path) -> AppResult<Connection> {
 pub fn apply(conn: &Connection) -> AppResult<()> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.execute_batch(SCHEMA)?;
+    migrate(conn)?;
     seed(conn)?;
     Ok(())
+}
+
+/// Additive migrations for databases created before a column existed.
+fn migrate(conn: &Connection) -> AppResult<()> {
+    if !column_exists(conn, "cards", "headword")? {
+        conn.execute("ALTER TABLE cards ADD COLUMN headword TEXT", [])?;
+    }
+    Ok(())
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> AppResult<bool> {
+    // `table` is a fixed internal identifier, never user input.
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Seed reference targets and, in the absence of any progress rows, a small
@@ -48,6 +81,61 @@ fn seed(conn: &Connection) -> AppResult<()> {
     if dict == 0 {
         conn.execute_batch(SEED_DICT)?;
     }
+
+    seed_review_cards(conn)?;
+    Ok(())
+}
+
+/// Curated demo review deck (18 due + 6 new common words). Content (pinyin,
+/// gloss) is resolved from the dictionary at review time via `headword`, so
+/// this does not depend on the dictionary being imported yet. Guarded so it
+/// runs once; it also migrates the old placeholder cards on existing DBs.
+fn seed_review_cards(conn: &Connection) -> AppResult<()> {
+    let current: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'review_seed'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if current.as_deref() == Some(REVIEW_SEED_VERSION) {
+        return Ok(());
+    }
+
+    conn.execute("DELETE FROM cards", [])?;
+    conn.execute("DELETE FROM reviews", [])?;
+
+    let now = now_secs();
+    let due = [
+        "你好", "谢谢", "中国", "学生", "老师", "朋友", "喜欢", "图书馆", "周末",
+        "今天", "明天", "名字", "医生", "水果", "苹果", "米饭", "电影", "商店",
+    ];
+    let new_words = ["高兴", "认识", "颜色", "衣服", "天气", "时间"];
+
+    {
+        let mut stmt = conn.prepare(
+            "INSERT INTO cards (kind, headword, due, last_review, state, stability, difficulty, reps) \
+             VALUES ('word', ?1, ?2, ?2, 'review', 6.0, 5.0, 1)",
+        )?;
+        for (i, word) in due.iter().enumerate() {
+            // due 1-4 days in the past, so they are all due now
+            let d = now - ((i as i64 % 4) + 1) * 86_400;
+            stmt.execute(params![word, d])?;
+        }
+    }
+    {
+        let mut stmt = conn
+            .prepare("INSERT INTO cards (kind, headword, due, state) VALUES ('word', ?1, ?2, 'new')")?;
+        for word in new_words {
+            stmt.execute(params![word, now])?;
+        }
+    }
+
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('review_seed', ?1) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [REVIEW_SEED_VERSION],
+    )?;
     Ok(())
 }
 
@@ -88,6 +176,7 @@ CREATE TABLE IF NOT EXISTS cards (
   id INTEGER PRIMARY KEY,
   kind TEXT NOT NULL,
   ref_id INTEGER,
+  headword TEXT,
   stability REAL,
   difficulty REAL,
   due INTEGER,
@@ -207,18 +296,6 @@ INSERT INTO settings (key, value) VALUES ('current_level', '3');
 
 INSERT INTO progress (hsk_level, chars_learned, words_learned, grammar_learned, syllables_learned)
 VALUES (3, 674, 512, 88, 402);
-
-INSERT INTO cards (kind, ref_id, due, state)
-SELECT 'word', value, strftime('%s','now') - 3600, 'review'
-FROM (WITH RECURSIVE c(value) AS (
-        SELECT 1 UNION ALL SELECT value + 1 FROM c WHERE value < 18
-      ) SELECT value FROM c);
-
-INSERT INTO cards (kind, ref_id, due, state)
-SELECT 'word', value, NULL, 'new'
-FROM (WITH RECURSIVE c(value) AS (
-        SELECT 1 UNION ALL SELECT value + 1 FROM c WHERE value < 6
-      ) SELECT value FROM c);
 "#;
 
 // Minimal dictionary covering the sample reader passages. Replaced wholesale

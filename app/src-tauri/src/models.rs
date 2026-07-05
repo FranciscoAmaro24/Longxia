@@ -40,3 +40,26 @@ pub struct Annotated {
     pub text: String,
     pub pinyin: Option<String>,
 }
+
+/// A card in the review queue, with content and the four rating previews
+/// (seconds until due for Again / Hard / Good / Easy).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewCard {
+    pub id: i64,
+    pub headword: String,
+    pub pinyin: Option<String>,
+    pub gloss: Option<String>,
+    pub again: i64,
+    pub hard: i64,
+    pub good: i64,
+    pub easy: i64,
+}
+
+/// Result of rating a card.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewResult {
+    pub due: i64,
+    pub state: String,
+}

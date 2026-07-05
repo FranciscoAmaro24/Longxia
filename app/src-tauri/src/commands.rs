@@ -1,13 +1,15 @@
 //! Tauri commands. Each is a small, typed boundary; inputs (when present) are
 //! bound as SQL parameters, never string-concatenated.
 
-use rusqlite::{Connection, OptionalExtension};
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
-use crate::models::{Annotated, DictEntry, Ring, TodaySummary};
+use crate::models::{Annotated, DictEntry, ReviewCard, ReviewResult, Ring, TodaySummary};
+use crate::srs::{self, StoredCard};
 
 /// Longest query we will look up. The reader taps single characters, so this
 /// is a generous cap that also bounds any accidental/hostile input.
@@ -158,6 +160,116 @@ pub(crate) fn dict_lookup(conn: &Connection, q: &str) -> AppResult<Vec<DictEntry
     Ok(out)
 }
 
+/// The review queue: due cards and new cards, with content and rating previews.
+#[tauri::command]
+pub fn get_review_queue(db: State<'_, Db>) -> AppResult<Vec<ReviewCard>> {
+    let conn = db
+        .0
+        .lock()
+        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
+    review_queue(&conn, Utc::now())
+}
+
+/// Rate a card (1=Again .. 4=Easy): reschedule it and log the review.
+#[tauri::command]
+pub fn review_card(db: State<'_, Db>, card_id: i64, rating: i64) -> AppResult<ReviewResult> {
+    let conn = db
+        .0
+        .lock()
+        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
+    apply_review(&conn, card_id, rating, Utc::now())
+}
+
+fn load_stored(conn: &Connection, id: i64) -> AppResult<Option<StoredCard>> {
+    conn.query_row(
+        "SELECT stability, difficulty, due, reps, lapses, state, last_review \
+         FROM cards WHERE id = ?1",
+        [id],
+        |r| {
+            Ok(StoredCard {
+                stability: r.get(0)?,
+                difficulty: r.get(1)?,
+                due: r.get(2)?,
+                reps: r.get(3)?,
+                lapses: r.get(4)?,
+                state: r.get(5)?,
+                last_review: r.get(6)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+fn first_sense(conn: &Connection, word: &str) -> AppResult<(Option<String>, Option<String>)> {
+    let row = conn
+        .query_row(
+            "SELECT pinyin, gloss FROM dictionary WHERE simplified = ?1 LIMIT 1",
+            [word],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    Ok(row.unwrap_or((None, None)))
+}
+
+pub(crate) fn review_queue(conn: &Connection, now: DateTime<Utc>) -> AppResult<Vec<ReviewCard>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, headword, stability, difficulty, due, reps, lapses, state, last_review \
+         FROM cards \
+         WHERE headword IS NOT NULL AND (state = 'new' OR (due IS NOT NULL AND due <= ?1)) \
+         ORDER BY (state = 'new') ASC, due ASC LIMIT 100",
+    )?;
+    let raw: Vec<(i64, String, StoredCard)> = stmt
+        .query_map([now.timestamp()], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                StoredCard {
+                    stability: r.get(2)?,
+                    difficulty: r.get(3)?,
+                    due: r.get(4)?,
+                    reps: r.get(5)?,
+                    lapses: r.get(6)?,
+                    state: r.get(7)?,
+                    last_review: r.get(8)?,
+                },
+            ))
+        })?
+        .collect::<Result<_, _>>()?;
+
+    let mut out = Vec::with_capacity(raw.len());
+    for (id, headword, stored) in raw {
+        let (again, hard, good, easy) = srs::preview_secs(&stored, now);
+        let (pinyin, gloss) = first_sense(conn, &headword)?;
+        out.push(ReviewCard { id, headword, pinyin, gloss, again, hard, good, easy });
+    }
+    Ok(out)
+}
+
+pub(crate) fn apply_review(
+    conn: &Connection,
+    card_id: i64,
+    rating_num: i64,
+    now: DateTime<Utc>,
+) -> AppResult<ReviewResult> {
+    let rating = srs::rating_from(rating_num)
+        .ok_or_else(|| AppError::State(format!("invalid rating {rating_num}")))?;
+    let stored = load_stored(conn, card_id)?
+        .ok_or_else(|| AppError::State(format!("card {card_id} not found")))?;
+
+    let s = srs::schedule(&stored, rating, now);
+    conn.execute(
+        "UPDATE cards SET stability = ?1, difficulty = ?2, due = ?3, reps = ?4, \
+         lapses = ?5, state = ?6, last_review = ?7 WHERE id = ?8",
+        params![s.stability, s.difficulty, s.due, s.reps, s.lapses, s.state, s.last_review, card_id],
+    )?;
+    conn.execute(
+        "INSERT INTO reviews (card_id, rating, reviewed_at) VALUES (?1, ?2, ?3)",
+        params![card_id, rating_num, now.timestamp()],
+    )?;
+    Ok(ReviewResult { due: s.due, state: s.state })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +318,38 @@ mod tests {
         assert_eq!(toks[0].pinyin.as_deref(), Some("shū"));
         assert_eq!(toks[1].text, "。");
         assert!(toks[1].pinyin.is_none());
+    }
+
+    #[test]
+    fn review_flow_reschedules_and_shrinks_queue() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::apply(&conn).unwrap();
+        let now = Utc::now();
+
+        let queue = review_queue(&conn, now).unwrap();
+        assert_eq!(queue.len(), 24); // 18 due + 6 new
+        let first = queue[0].id;
+
+        let res = apply_review(&conn, first, 3, now).unwrap(); // Good
+        assert!(res.due >= now.timestamp());
+        assert_ne!(res.state, "new");
+
+        // the reviewed card is no longer due
+        let after = review_queue(&conn, now).unwrap();
+        assert_eq!(after.len(), 23);
+
+        // a review row was logged
+        let logged: i64 = conn
+            .query_row("SELECT COUNT(*) FROM reviews WHERE card_id = ?1", [first], |r| r.get(0))
+            .unwrap();
+        assert_eq!(logged, 1);
+    }
+
+    #[test]
+    fn invalid_rating_is_rejected() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::apply(&conn).unwrap();
+        let id = review_queue(&conn, Utc::now()).unwrap()[0].id;
+        assert!(apply_review(&conn, id, 9, Utc::now()).is_err());
     }
 }

@@ -7,6 +7,35 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 8: Review (FSRS study loop)
+- **Added** `rs-fsrs` + `chrono`; `srs.rs` wraps the FSRS scheduler (converts our stored fields
+  <-> `rs_fsrs::Card`) exposing `schedule` (rate a card) and `preview_secs` (button intervals).
+- **Schema:** added a `headword` column to `cards` (with an additive `ALTER` migration for
+  existing DBs); replaced the placeholder demo cards with a curated deck (18 due + 6 new common
+  words). Card content (pinyin/gloss) is resolved from the dictionary at review time via headword.
+- **Commands:** `get_review_queue` (due + new cards with content and 4 rating previews) and
+  `review_card` (reschedule via FSRS + log the review). Core `review_queue`/`apply_review` are
+  decoupled from Tauri state and unit-tested.
+- **Frontend:** `features/review/ReviewScreen` - one card at a time, reveal, then Again/Hard/Good/
+  Easy with interval labels; keyboard (Space reveals, 1-4 rate); loading/empty/done states.
+  Grade colors reuse the palette (Again = red pen, Good = ink primary, etc.).
+- **Wired** the Review section; Today's due count reflects reviews (refetch on navigation).
+- **Verified** `cargo test` (10, incl. FSRS monotonicity, queue shrink after review, invalid
+  rating rejected, Today counts) and `npm run build` (tsc strict + vite) pass.
+
+### 2026-07-05 - Step 7: Writing (田字格 + Hanzi Writer)
+- **Added** `hanzi-writer` + `hanzi-writer-data`; stroke data for the practice set is bundled
+  locally (no CDN, offline-first).
+- **Added** `src/features/writing/` - `WritingScreen` renders the selected character inside the
+  reusable `TianGrid` cell via Hanzi Writer, with Animate (stroke-order), Trace (guided quiz),
+  Show, and Reset. Stroke colors read from CSS tokens so they match light/dark; the user's
+  strokes draw in the correction (red-pen) color, completion feedback in jade.
+- **Added** `characters.ts` - practice set (你好我学习写字人中文) with pinyin/gloss and a
+  char-to-stroke-data map; extend by importing more `hanzi-writer-data/*.json`.
+- **Wired** the Write section in `App.tsx`.
+- **Verified** `npm run build` (tsc strict + vite) passes. Note: the canvas animation/quiz is
+  visual/interactive and needs the running window to see (could not drive it headlessly here).
+
 ### 2026-07-05 - Step 6: CC-CEDICT import
 - **Added** `dict_import.rs`: CC-CEDICT line parser, numbered-to-tone-mark pinyin converter
   (handles `u:` -> ü, neutral tone, capitals, literal numbers), and a transactional

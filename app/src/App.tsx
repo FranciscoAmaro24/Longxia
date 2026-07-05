@@ -3,14 +3,14 @@ import { AppShell } from "./app/AppShell/AppShell";
 import { NAV_ITEMS, type SectionId } from "./app/nav";
 import { TodayScreen } from "./features/today/TodayScreen";
 import { ReaderScreen } from "./features/reader/ReaderScreen";
+import { WritingScreen } from "./features/writing/WritingScreen";
+import { ReviewScreen } from "./features/review/ReviewScreen";
 import { PlaceholderScreen } from "./features/PlaceholderScreen";
 
 /** One-line notes for the not-yet-built sections. */
 const SECTION_NOTES: Partial<Record<SectionId, string>> = {
-  write: "田字格 canvas: stroke-order animation, guided tracing, AI structure feedback.",
   notebook: "Freeform notes; highlight a span for red-pen AI insight; send to SRS.",
   speak: "Text-to-speech, recording, and per-syllable tone scoring.",
-  review: "The FSRS review queue over your due cards.",
 };
 
 function App() {
@@ -24,6 +24,10 @@ function App() {
         <TodayScreen onNavigate={setActive} />
       ) : active === "read" ? (
         <ReaderScreen />
+      ) : active === "write" ? (
+        <WritingScreen />
+      ) : active === "review" ? (
+        <ReviewScreen />
       ) : (
         <PlaceholderScreen zh={item.zh} en={item.en} note={SECTION_NOTES[active]} />
       )}

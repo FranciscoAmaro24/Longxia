@@ -9,6 +9,7 @@ pub mod db;
 pub mod dict_import;
 pub mod error;
 pub mod models;
+pub mod srs;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -30,7 +31,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_today_summary,
             commands::lookup,
-            commands::annotate
+            commands::annotate,
+            commands::get_review_queue,
+            commands::review_card
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

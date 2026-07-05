@@ -1,0 +1,97 @@
+.screen {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--border-hair);
+}
+.zh {
+  font-family: var(--font-song);
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+.en {
+  color: var(--ink-muted);
+}
+
+.selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+.selChar {
+  font-family: var(--font-song);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* the hanzi-writer SVG mounts here, inside the 田字格 cell */
+.target {
+  display: block;
+  line-height: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.feedback {
+  min-height: 1.4em;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  text-align: center;
+}
+.feedbackCorrection {
+  color: var(--correction);
+}
+.feedbackJade {
+  color: var(--jade);
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.metaChar {
+  font-family: var(--font-song);
+  font-size: var(--text-xl);
+}
+.metaPy {
+  font-family: var(--font-mono);
+  color: var(--jade);
+}
+.metaGloss {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}
+
+.hint {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
