@@ -7,6 +7,22 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 3: App shell + Today screen
+- **Added** `src/app/nav.ts` - single source of truth for the six sections (Today, Read, Write,
+  Notebook, Speak, Review).
+- **Added** `src/app/AppShell/` - sticky left margin-rule nav rail + scrolling content area.
+  Pure layout, owns no screen state; active row marked with an ink rule and `aria-current`.
+  Collapses to a top bar under 720px.
+- **Added** `ProgressRing` primitive - single-hue (jade) radial gauge; value always shown as a
+  number; recessive track; `role="img"` label. Exported from the components barrel.
+- **Added** `src/features/today/TodayScreen.tsx` - the home dashboard: HSK progress rings,
+  due-today with the one primary action, continue-writing (田字格 preview), and quick-practice
+  actions. Data is static placeholder (wired to SQLite in Step 4).
+- **Added** `src/features/PlaceholderScreen.tsx` - keeps not-yet-built sections navigable.
+- **Rewrote** `App.tsx` to mount the shell and switch sections via local state (router later).
+  Removed the Step 2 gallery and its `App.module.css`.
+- **Verified** `npm run build` (tsc strict + vite) passes.
+
 ### 2026-07-05 - Step 2: Design tokens + reusable primitives
 - **Added** `src/styles/tokens.css` - single source of truth for color, type, and spacing as
   CSS custom properties. Light + dark via `prefers-color-scheme` and explicit `[data-theme]`

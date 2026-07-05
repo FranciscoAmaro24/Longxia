@@ -1,0 +1,126 @@
+.shell {
+  display: flex;
+  min-height: 100%;
+}
+
+/* left margin rail, like the ruled margin of a notebook page */
+.rail {
+  flex: 0 0 auto;
+  width: 208px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  border-right: var(--border-hair);
+  padding: var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.brandZh {
+  font-family: var(--font-song);
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+.brandPy {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* nav item: text button, ink marker on the active row (no pill) */
+.navItem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--ink-muted);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.navItem:hover {
+  color: var(--ink);
+}
+.navItemActive {
+  color: var(--ink);
+  border-left-color: var(--ink);
+}
+.navZh {
+  font-family: var(--font-hei);
+  font-size: var(--text-base);
+}
+.navEn {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.navItemActive .navEn {
+  color: var(--ink-muted);
+}
+
+.railFoot {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* stack the rail on top for narrow windows */
+@media (max-width: 720px) {
+  .shell {
+    flex-direction: column;
+  }
+  .rail {
+    width: auto;
+    height: auto;
+    position: static;
+    border-right: 0;
+    border-bottom: var(--border-hair);
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+  }
+  .navItem {
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    padding: var(--space-1) var(--space-2);
+  }
+  .navItemActive {
+    border-left-color: transparent;
+    border-bottom-color: var(--ink);
+  }
+  .railFoot {
+    display: none;
+  }
+}

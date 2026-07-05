@@ -11,5 +11,8 @@ export type { PanelProps } from "./Panel/Panel";
 export { Tag } from "./Tag/Tag";
 export type { TagProps, TagVariant } from "./Tag/Tag";
 
+export { ProgressRing } from "./ProgressRing/ProgressRing";
+export type { ProgressRingProps } from "./ProgressRing/ProgressRing";
+
 export { TianGrid } from "./TianGrid/TianGrid";
 export type { TianGridProps } from "./TianGrid/TianGrid";
