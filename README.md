@@ -9,7 +9,10 @@ Three learning sections: **Reading**, **Writing**, and **Speaking**.
 
 ## Status
 
-**Planning / pre-scaffold.** Design direction and wireframes done; app not yet scaffolded.
+**Core app working.** All six sections are built: Today (HSK progress from SQLite), Reader
+(tap-to-lookup + ambient pinyin over CC-CEDICT), Writing (Hanzi Writer 田字格), Review (FSRS with
+typed recall), Notebook (autosave + red-pen Claude insights), and Speaking (TTS shadowing + tone
+contours + record/playback). Rust core with SQLite; frontend in React. Next: polish and packaging.
 
 ## Key decisions so far
 
@@ -64,6 +67,19 @@ cargo run --example import_cedict -- resources/cedict.txt \
 The importer parses the CC-CEDICT format and converts numbered pinyin (`ni3 hao3`) to tone marks
 (`nǐ hǎo`). Without this step the app falls back to a tiny built-in seed dictionary. (Bundling
 the dictionary into production builds is future work.)
+
+## AI insights (Claude)
+
+The red-pen AI insights call the Claude API from the Rust core (the key never enters the
+frontend bundle). Set the key in the environment before launching the app:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+cd app && npm run tauri dev
+```
+
+Model defaults to `claude-haiku-4-5` (cheapest). Without the key set, the notebook still works;
+only the "Explain" action reports that the key is missing.
 
 ## Roadmap
 

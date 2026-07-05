@@ -72,3 +72,44 @@ export function getReviewQueue(): Promise<ReviewCard[]> {
 export function reviewCard(cardId: number, rating: Rating): Promise<ReviewResult> {
   return invoke<ReviewResult>("review_card", { cardId, rating });
 }
+
+// --- Notebook + AI insights ---
+
+export interface Insight {
+  id: number;
+  snippet: string;
+  explanation: string;
+  start: number;
+  end: number;
+}
+
+export interface Note {
+  text: string;
+  insights: Insight[];
+}
+
+/** Explain a span of Chinese text with Claude (red-pen insight). */
+export function explain(text: string): Promise<string> {
+  return invoke<string>("explain", { text });
+}
+
+export function getNote(): Promise<Note> {
+  return invoke<Note>("get_note");
+}
+
+export function saveNote(text: string): Promise<void> {
+  return invoke<void>("save_note", { text });
+}
+
+export function addInsight(
+  snippet: string,
+  explanation: string,
+  start: number,
+  end: number,
+): Promise<Insight> {
+  return invoke<Insight>("add_insight", { snippet, explanation, start, end });
+}
+
+export function deleteInsight(id: number): Promise<void> {
+  return invoke<void>("delete_insight", { id });
+}

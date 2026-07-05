@@ -63,3 +63,22 @@ pub struct ReviewResult {
     pub due: i64,
     pub state: String,
 }
+
+/// A red-pen AI insight bound to a span of the note.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Insight {
+    pub id: i64,
+    pub snippet: String,
+    pub explanation: String,
+    pub start: i64,
+    pub end: i64,
+}
+
+/// The notebook: the note body plus its saved insights.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Note {
+    pub text: String,
+    pub insights: Vec<Insight>,
+}

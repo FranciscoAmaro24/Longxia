@@ -7,6 +7,35 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 10: Speaking
+- **Added** `features/speaking/` - `SpeakingScreen` with system-voice TTS shadowing
+  (`SpeechSynthesis`, zh-CN, slow/normal), per-syllable tone contours drawn from the pinyin
+  (neutral ink), tap-a-character playback, and record + play-back (`MediaRecorder`) to compare by
+  ear. `audio.ts` holds `speak`/`toneOf`/`tonePath`; `phrases.ts` the sample phrases.
+- Automated tone scoring is deferred (needs reliable in-app speech recognition); the screen shows
+  the expected tone contour as the aid instead.
+- **Wired** the Speak section; **removed** `PlaceholderScreen` - all six sections now have real
+  screens. `App.tsx` simplified to a flat section switch.
+- **Verified** `npm run build` passes (Rust unchanged; 11 tests still green). Live TTS/recording
+  need the running window (and, for recording, microphone permission).
+
+### 2026-07-05 - Step 9: Notebook + AI insights
+- **Added** `ai.rs` - `explain(text)` command calling the Claude API via raw HTTP from the Rust
+  core (`reqwest`, rustls). Key read from `ANTHROPIC_API_KEY`, never in the frontend bundle;
+  model `claude-haiku-4-5`; input trimmed + length-capped; selected text treated as data (not
+  instructions).
+- **Added** `notebook.rs` - a single autosaving note (id=1) + red-pen insights persisted in
+  `notes`/`note_spans`. Commands: `get_note`, `save_note`, `add_insight`, `delete_insight`
+  (core functions decoupled and unit-tested).
+- **Added** an `Ai` error variant.
+- **Frontend:** `api.ts` wrappers + `features/notebook/NotebookScreen` - autosaving editor with a
+  red-pen margin; select any span and "Explain" calls Claude, saves the insight, and lists it
+  bound to that span. Delete supported. Missing-key and error states shown inline.
+- **Wired** the Notebook section.
+- **Docs:** README section on setting `ANTHROPIC_API_KEY`.
+- **Verified** `cargo test` (11, incl. notebook roundtrip) and `npm run build` pass. The live AI
+  call needs a key + the running window; the persistence path is tested.
+
 ### 2026-07-05 - Step 8.1: Review typed recall
 - **Added** a Pinyin / 字 toggle to Review. Pinyin mode shows the characters and you type the
   romanization (tones and spacing optional - normalized before comparing, with u/ü/v treated

@@ -4,11 +4,13 @@
 // typed commands in `commands`. Every exposed command is an attack surface, so
 // we register them deliberately.
 
+pub mod ai;
 pub mod commands;
 pub mod db;
 pub mod dict_import;
 pub mod error;
 pub mod models;
+pub mod notebook;
 pub mod srs;
 
 use std::sync::Mutex;
@@ -33,7 +35,12 @@ pub fn run() {
             commands::lookup,
             commands::annotate,
             commands::get_review_queue,
-            commands::review_card
+            commands::review_card,
+            ai::explain,
+            notebook::get_note,
+            notebook::save_note,
+            notebook::add_insight,
+            notebook::delete_insight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

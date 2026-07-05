@@ -8,6 +8,7 @@ pub enum AppError {
     Db(String),
     State(String),
     Io(String),
+    Ai(String),
 }
 
 impl fmt::Display for AppError {
@@ -16,6 +17,7 @@ impl fmt::Display for AppError {
             AppError::Db(m) => write!(f, "database error: {m}"),
             AppError::State(m) => write!(f, "state error: {m}"),
             AppError::Io(m) => write!(f, "io error: {m}"),
+            AppError::Ai(m) => write!(f, "{m}"),
         }
     }
 }
