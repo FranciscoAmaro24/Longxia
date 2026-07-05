@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Panel, Tag } from "../../components";
+import { cn } from "../../lib/cn";
 import {
   getReviewQueue,
   reviewCard,
@@ -8,12 +9,24 @@ import {
 } from "../../lib/api";
 import styles from "./ReviewScreen.module.css";
 
+type Mode = "pinyin" | "chars";
+
 /** Seconds until due -> a short human label for the grade buttons. */
 function fmtInterval(secs: number): string {
   if (secs < 60) return "<1m";
   if (secs < 3600) return `${Math.round(secs / 60)}m`;
   if (secs < 86400) return `${Math.round(secs / 3600)}h`;
   return `${Math.round(secs / 86400)}d`;
+}
+
+/** Normalize pinyin for comparison: drop tones, spacing, and u/ü/v differences. */
+function normPinyin(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // strip combining tone marks
+    .replace(/v/g, "u")
+    .replace(/[^a-z]/g, "");
 }
 
 const GRADES: {
@@ -29,17 +42,22 @@ const GRADES: {
 ];
 
 /**
- * Review: an FSRS study loop. Reads the due queue, shows one card at a time,
- * reveals the answer, and reschedules on a rating via the Rust core. Keyboard:
- * Space reveals, 1-4 rate.
+ * Review: an FSRS study loop with typed recall. Toggle between typing the
+ * pinyin (card shows the characters) or typing the characters via IME (card
+ * shows pinyin + meaning). Type, check, then rate. Reschedules via the Rust
+ * core. Keyboard: Enter checks, 1-4 rate.
  */
 export function ReviewScreen() {
   const [queue, setQueue] = useState<ReviewCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("pinyin");
   const [idx, setIdx] = useState(0);
-  const [revealed, setRevealed] = useState(false);
+  const [input, setInput] = useState("");
+  const [checked, setChecked] = useState(false);
+  const [correct, setCorrect] = useState<boolean | null>(null);
   const [reviewed, setReviewed] = useState(0);
   const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getReviewQueue()
@@ -51,6 +69,38 @@ export function ReviewScreen() {
   const done = queue != null && idx >= queue.length && queue.length > 0;
   const remaining = queue ? queue.length - idx : 0;
 
+  // Reset the answer state on card change or mode switch, and focus the input.
+  useEffect(() => {
+    setInput("");
+    setChecked(false);
+    setCorrect(null);
+  }, [idx, mode]);
+
+  useEffect(() => {
+    if (current && !checked) inputRef.current?.focus();
+  }, [current, checked, mode]);
+
+  const check = useCallback(
+    (skip = false) => {
+      if (!current || checked) return;
+      if (skip) {
+        setCorrect(null);
+        setChecked(true);
+        return;
+      }
+      const typed = input.trim();
+      if (typed === "") return;
+      const ok =
+        mode === "pinyin"
+          ? current.pinyin != null &&
+            normPinyin(typed) === normPinyin(current.pinyin)
+          : typed === current.headword;
+      setCorrect(ok);
+      setChecked(true);
+    },
+    [current, checked, input, mode],
+  );
+
   const grade = useCallback(
     (rating: Rating) => {
       if (!current || busy) return;
@@ -59,7 +109,6 @@ export function ReviewScreen() {
         .catch((e) => setError(String(e)))
         .finally(() => {
           setReviewed((n) => n + 1);
-          setRevealed(false);
           setIdx((i) => i + 1);
           setBusy(false);
         });
@@ -67,20 +116,36 @@ export function ReviewScreen() {
     [current, busy],
   );
 
-  // Keyboard shortcuts.
+  // Number keys rate once the answer is checked.
   useEffect(() => {
-    if (!current) return;
+    if (!current || !checked) return;
     const onKey = (e: KeyboardEvent) => {
-      if (!revealed && (e.code === "Space" || e.key === "Enter")) {
-        e.preventDefault();
-        setRevealed(true);
-      } else if (revealed && ["1", "2", "3", "4"].includes(e.key)) {
-        grade(Number(e.key) as Rating);
-      }
+      if (["1", "2", "3", "4"].includes(e.key)) grade(Number(e.key) as Rating);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, revealed, grade]);
+  }, [current, checked, grade]);
+
+  const modeToggle = (
+    <div className={styles.toggle}>
+      <Button
+        size="sm"
+        variant={mode === "pinyin" ? "secondary" : "ghost"}
+        aria-pressed={mode === "pinyin"}
+        onClick={() => setMode("pinyin")}
+      >
+        Pinyin
+      </Button>
+      <Button
+        size="sm"
+        variant={mode === "chars" ? "secondary" : "ghost"}
+        aria-pressed={mode === "chars"}
+        onClick={() => setMode("chars")}
+      >
+        字
+      </Button>
+    </div>
+  );
 
   return (
     <main className={styles.screen}>
@@ -112,22 +177,71 @@ export function ReviewScreen() {
         </Panel>
       ) : (
         current && (
-          <Panel label="Recall">
+          <Panel label="Recall" actions={modeToggle}>
             <div className={styles.card}>
-              <div className={styles.headword} lang="zh">
-                {current.headword}
-              </div>
+              {/* Prompt */}
+              {mode === "pinyin" ? (
+                <div className={styles.headword} lang="zh">
+                  {current.headword}
+                </div>
+              ) : (
+                <>
+                  {current.pinyin && (
+                    <div className={styles.promptPy}>{current.pinyin}</div>
+                  )}
+                  {current.gloss && (
+                    <div className={styles.promptGloss}>{current.gloss}</div>
+                  )}
+                </>
+              )}
 
-              {!revealed ? (
-                <Button variant="primary" onClick={() => setRevealed(true)}>
-                  Show answer
-                </Button>
+              {!checked ? (
+                <div className={styles.inputRow}>
+                  <input
+                    ref={inputRef}
+                    className={cn(
+                      styles.input,
+                      mode === "chars" && styles.inputChars,
+                    )}
+                    value={input}
+                    lang={mode === "chars" ? "zh" : undefined}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    placeholder={mode === "pinyin" ? "type the pinyin" : "type the characters"}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        check();
+                      }
+                    }}
+                  />
+                  <div className={styles.inputButtons}>
+                    <Button variant="primary" onClick={() => check()}>
+                      Check
+                    </Button>
+                    <Button variant="quiet" onClick={() => check(true)}>
+                      Reveal
+                    </Button>
+                  </div>
+                </div>
               ) : (
                 <>
                   <div className={styles.answer}>
-                    <span className={styles.answerPy}>
-                      {current.pinyin ?? "—"}
-                    </span>
+                    {correct != null && (
+                      <Tag variant={correct ? "jade" : "correction"}>
+                        {correct ? "correct" : "not quite"}
+                      </Tag>
+                    )}
+                    {mode === "chars" && (
+                      <div className={styles.headword} lang="zh">
+                        {current.headword}
+                      </div>
+                    )}
+                    {current.pinyin && (
+                      <span className={styles.answerPy}>{current.pinyin}</span>
+                    )}
                     {current.gloss && (
                       <span className={styles.answerGloss}>{current.gloss}</span>
                     )}
@@ -160,7 +274,7 @@ export function ReviewScreen() {
 
       {current && (
         <p className={styles.hint}>
-          {revealed ? "Rate 1-4 · how well did you recall it?" : "Space to reveal"}
+          {checked ? "Rate 1-4 · how well did you recall it?" : "Enter to check"}
         </p>
       )}
     </main>

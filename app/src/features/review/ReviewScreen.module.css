@@ -36,6 +36,11 @@
   color: var(--ink-muted);
 }
 
+.toggle {
+  display: flex;
+  gap: var(--space-1);
+}
+
 .card {
   display: flex;
   flex-direction: column;
@@ -43,16 +48,59 @@
   gap: var(--space-5);
   padding: var(--space-6) var(--space-4);
 }
+
+/* prompt: the Chinese (pinyin mode) or the pinyin + gloss (characters mode) */
 .headword {
   font-family: var(--font-song);
   font-size: var(--text-3xl);
   line-height: 1;
 }
+.promptPy {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  color: var(--jade);
+  text-align: center;
+}
+.promptGloss {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  max-width: 46ch;
+}
+
+.inputRow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+.input {
+  width: 100%;
+  max-width: 340px;
+  padding: var(--space-3);
+  border: var(--border-ink);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  text-align: center;
+}
+.inputChars {
+  font-family: var(--font-song);
+  font-size: var(--text-2xl);
+}
+.inputButtons {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .answer {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   text-align: center;
 }
 .answerPy {

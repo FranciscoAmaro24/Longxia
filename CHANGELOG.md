@@ -7,6 +7,13 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 8.1: Review typed recall
+- **Added** a Pinyin / 字 toggle to Review. Pinyin mode shows the characters and you type the
+  romanization (tones and spacing optional - normalized before comparing, with u/ü/v treated
+  alike); characters mode shows pinyin + meaning and you type the hanzi via IME (exact match).
+- Flow is type -> Check (or Reveal to skip) -> shows correct / not quite -> rate. Keyboard: Enter
+  checks, 1-4 rate. The input is styled square and on-brand (Songti for characters mode).
+
 ### 2026-07-05 - Step 8: Review (FSRS study loop)
 - **Added** `rs-fsrs` + `chrono`; `srs.rs` wraps the FSRS scheduler (converts our stored fields
   <-> `rs_fsrs::Card`) exposing `schedule` (rate a card) and `preview_secs` (button intervals).
