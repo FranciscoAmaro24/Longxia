@@ -1,0 +1,55 @@
+/* 田字格: a square practice cell with a dashed centre cross. The structural
+   motif of the app. Size is driven by the --tian-size custom property. */
+.tian {
+  position: relative;
+  width: var(--tian-size, 96px);
+  height: var(--tian-size, 96px);
+  flex: 0 0 auto;
+  border: 1.5px solid var(--grid);
+  border-radius: var(--radius); /* 0 */
+  background: var(--paper-raised);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* dashed guides, inset from the edges */
+.tian::before,
+.tian::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+.tian::before {
+  left: 50%;
+  top: 6%;
+  bottom: 6%;
+  border-left: 1px dashed var(--grid);
+  transform: translateX(-0.5px);
+}
+.tian::after {
+  top: 50%;
+  left: 6%;
+  right: 6%;
+  border-top: 1px dashed var(--grid);
+  transform: translateY(-0.5px);
+}
+
+.char {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-song);
+  line-height: 1;
+  /* scale the glyph to the cell */
+  font-size: calc(var(--tian-size, 96px) * 0.62);
+}
+
+/* faint model glyph to trace over */
+.ghost {
+  color: var(--ink-faint);
+}
+
+/* the learner's / final ink */
+.ink {
+  color: var(--ink);
+}

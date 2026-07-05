@@ -1,0 +1,32 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: var(--border-hair);
+  border-radius: var(--radius); /* 0 */
+  padding: 0.1rem var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+/* red-pen: AI insight / correction */
+.correction {
+  color: var(--correction);
+  border-color: color-mix(in srgb, var(--correction) 45%, var(--line));
+}
+
+/* progress / correct / mastery */
+.jade {
+  color: var(--jade);
+  border-color: color-mix(in srgb, var(--jade) 45%, var(--line));
+}
+
+/* stronger ink emphasis */
+.ink {
+  color: var(--ink);
+  border-color: var(--ink);
+}

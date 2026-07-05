@@ -1,13 +1,9 @@
 /*
- * globals.css - minimal base only.
- * The full design-token system (color scale, type scale, spacing, primitives)
- * arrives in Step 2. Keep this file small: reset + page ground + base type.
- *
- * Design rules carried through the whole app:
- *   - No rounded corners (square edges, 田字格 grid language).
- *   - No pill / gradient buttons or big centered bold headings.
- *   - Chinese typography rendered natively (Songti SC / PingFang SC).
+ * globals.css - reset + base element styling only.
+ * Component-specific styles live next to each component as CSS modules.
+ * All values come from tokens.css; do not hardcode colors or sizes here.
  */
+@import "./tokens.css";
 
 /* --- reset --- */
 *,
@@ -16,65 +12,68 @@
   box-sizing: border-box;
 }
 
+* {
+  margin: 0;
+}
+
 html,
 body,
 #root {
   height: 100%;
 }
 
-body {
-  margin: 0;
-}
-
-/* --- placeholder ground (superseded by tokens in Step 2) --- */
-:root {
-  --paper: #ece9e0;
-  --ink: #1b1e24;
-  --ink-2: #565a63;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-song: "Songti SC", "Song", "STSong", serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #15171c;
-    --ink: #e9e5d9;
-    --ink-2: #a7a79c;
-  }
-}
-
+/* --- base --- */
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* --- clean-slate placeholder (removed in Step 3) --- */
-.app-blank {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  user-select: none;
+::selection {
+  background: var(--selection-bg);
 }
 
-.app-blank__mark {
-  margin: 0;
-  font-family: var(--font-song);
-  font-size: clamp(3rem, 12vw, 6rem);
-  letter-spacing: 0.08em;
+/* Headings inherit by default. We drive scale/weight per component so nothing
+   defaults to the oversized bold heading look. */
+h1,
+h2,
+h3,
+h4 {
+  font-size: inherit;
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
 }
 
-.app-blank__sub {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--ink-2);
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Chinese text opts into the right faces via these utilities. */
+[lang="zh"] {
+  font-family: var(--font-hei);
+}
+
+/* Visible, non-glowing keyboard focus (square, matches the system). */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -1,0 +1,109 @@
+/*
+ * tokens.css - the single source of truth for the visual system.
+ *
+ * Everything downstream (globals + every component) reads these custom
+ * properties, so a global restyle means editing this file only. Palette is
+ * defined once, then re-stated for dark via prefers-color-scheme and for an
+ * explicit [data-theme] override (for a future in-app toggle).
+ *
+ * House rules encoded here: --radius is 0 (square edges, 田字格 language),
+ * borders are hairlines, and typography is Chinese-native.
+ */
+
+:root {
+  /* --- palette: light (paper) --- */
+  --paper: #ece9e0;
+  --paper-raised: #f3f1ea;
+  --paper-sunken: #e4e0d5;
+  --ink: #1b1e24;
+  --ink-muted: #565a63;
+  --ink-faint: #8a8d93;
+  --line: #cdc9bc;
+  --grid: #c9c4b4;
+  --correction: #bb3b2e; /* red pen: AI + corrections only */
+  --jade: #4e7c6b; /* progress / correct only */
+
+  /* --- typography --- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-hei: "PingFang SC", "Heiti SC", var(--font-sans); /* Chinese UI text */
+  --font-song: "Songti SC", "STSong", "Song", serif; /* Chinese display */
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; /* data, labels, pinyin */
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.875rem;
+  --text-3xl: 2.5rem;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --leading-tight: 1.15;
+  --leading: 1.55;
+  --leading-loose: 2; /* Chinese passages */
+  --tracking-label: 0.14em; /* uppercase mono labels */
+
+  /* --- spacing scale (0.25rem base) --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* --- borders / shape --- */
+  --radius: 0; /* square by design; do not round */
+  --border-hair: 1px solid var(--line);
+  --border-ink: 1px solid var(--ink);
+
+  /* --- roles derived from palette --- */
+  --focus: var(--correction);
+  --selection-bg: color-mix(in srgb, var(--correction) 22%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #15171c;
+    --paper-raised: #1f232b;
+    --paper-sunken: #1c1f26;
+    --ink: #e9e5d9;
+    --ink-muted: #a7a79c;
+    --ink-faint: #6e7178;
+    --line: #2c3038;
+    --grid: #31353e;
+    --correction: #df6e60;
+    --jade: #74a88f;
+  }
+}
+
+/* explicit overrides win over the media query in both directions */
+:root[data-theme="light"] {
+  --paper: #ece9e0;
+  --paper-raised: #f3f1ea;
+  --paper-sunken: #e4e0d5;
+  --ink: #1b1e24;
+  --ink-muted: #565a63;
+  --ink-faint: #8a8d93;
+  --line: #cdc9bc;
+  --grid: #c9c4b4;
+  --correction: #bb3b2e;
+  --jade: #4e7c6b;
+}
+
+:root[data-theme="dark"] {
+  --paper: #15171c;
+  --paper-raised: #1f232b;
+  --paper-sunken: #1c1f26;
+  --ink: #e9e5d9;
+  --ink-muted: #a7a79c;
+  --ink-faint: #6e7178;
+  --line: #2c3038;
+  --grid: #31353e;
+  --correction: #df6e60;
+  --jade: #74a88f;
+}
