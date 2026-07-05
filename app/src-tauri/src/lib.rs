@@ -1,14 +1,32 @@
 // Application entry point for the Tauri core.
 //
-// Commands are added here as features land (Step 4+). Keeping the handler
-// explicit and empty for now - every exposed command is an attack surface,
-// so we add them deliberately, one at a time, with validated inputs.
+// The database lives here as managed state; features reach it only through the
+// typed commands in `commands`. Every exposed command is an attack surface, so
+// we register them deliberately.
+
+mod commands;
+mod db;
+mod error;
+mod models;
+
+use std::sync::Mutex;
+use tauri::Manager;
+
+use db::Db;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![])
+        .setup(|app| {
+            // Store the SQLite file in the OS app-data directory.
+            let dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&dir)?;
+            let conn = db::init(&dir.join("longxia.db"))?;
+            app.manage(Db(Mutex::new(conn)));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![commands::get_today_summary])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

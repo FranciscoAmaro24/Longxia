@@ -7,6 +7,23 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 4: Rust SQLite core, Today wired to real data
+- **Added** `rusqlite` (bundled SQLite) to the Rust core. SQLite lives entirely in Rust; the
+  frontend never sees raw SQL, only typed commands.
+- **Added** Rust modules: `db.rs` (schema from PLAN.md section 2 + provisional `hsk_targets`,
+  `settings`, and a guarded dev seed), `models.rs` (camelCase view models), `commands.rs`
+  (`get_today_summary`), `error.rs` (serializable error type).
+- **Wired** state: DB opens in the OS app-data dir (`longxia.db`), managed behind a Mutex in
+  `lib.rs`; command registered explicitly in the invoke handler.
+- **Added** `src/lib/api.ts` - typed `invoke` wrappers so call sites never pass raw command
+  strings; the TS/Rust contract lives in one place.
+- **Wired** `TodayScreen` to `get_today_summary`: HSK rings and due/new counts now come from the
+  database, with quiet loading and error states so a slow/failed load never blanks the UI.
+- **Verified** `cargo test` (real schema + seed against an in-memory DB, asserting the command's
+  output), `cargo check`, and `npm run build` (tsc strict + vite) all pass.
+- Note: provisional HSK targets and the dev seed are stored in the DB with a `placeholder-2025`
+  source label; both are replaced when the official CTI lists are imported.
+
 ### 2026-07-05 - Step 3: App shell + Today screen
 - **Added** `src/app/nav.ts` - single source of truth for the six sections (Today, Read, Write,
   Notebook, Speak, Review).
