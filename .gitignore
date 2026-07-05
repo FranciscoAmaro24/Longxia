@@ -15,6 +15,12 @@ build/
 .env.*
 !.env.example
 
+# CC-CEDICT raw data (downloaded, CC-BY-SA; not committed - see README)
+app/src-tauri/resources/cedict.txt
+app/src-tauri/resources/*.gz
+# local dictionary preview db built by the import example
+app/src-tauri/*.db
+
 # OS / editor
 .DS_Store
 Thumbs.db

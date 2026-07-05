@@ -18,9 +18,9 @@ pub fn init(path: &Path) -> AppResult<Connection> {
     Ok(conn)
 }
 
-/// Enable FKs, run migrations, seed. Separated from `init` so tests can apply
-/// it to an in-memory connection.
-pub(crate) fn apply(conn: &Connection) -> AppResult<()> {
+/// Enable FKs, run migrations, seed. Separated from `init` so tests and the
+/// import example can apply it to any connection.
+pub fn apply(conn: &Connection) -> AppResult<()> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.execute_batch(SCHEMA)?;
     seed(conn)?;
@@ -41,6 +41,12 @@ fn seed(conn: &Connection) -> AppResult<()> {
         conn.query_row("SELECT COUNT(*) FROM progress", [], |r| r.get(0))?;
     if progress == 0 {
         conn.execute_batch(SEED_DEV)?;
+    }
+
+    let dict: i64 =
+        conn.query_row("SELECT COUNT(*) FROM dictionary", [], |r| r.get(0))?;
+    if dict == 0 {
+        conn.execute_batch(SEED_DICT)?;
     }
     Ok(())
 }
@@ -167,6 +173,18 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Raw dictionary lookup source (CC-CEDICT shape). Distinct from the curated
+-- HSK `words`/`characters` tables; populated by the CC-CEDICT import later.
+-- `pinyin` is stored display-ready (tone marks), not numbered.
+CREATE TABLE IF NOT EXISTS dictionary (
+  id INTEGER PRIMARY KEY,
+  simplified TEXT NOT NULL,
+  traditional TEXT,
+  pinyin TEXT,
+  gloss TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_dictionary_simplified ON dictionary(simplified);
 "#;
 
 const SEED_TARGETS: &str = r#"
@@ -201,4 +219,28 @@ SELECT 'word', value, NULL, 'new'
 FROM (WITH RECURSIVE c(value) AS (
         SELECT 1 UNION ALL SELECT value + 1 FROM c WHERE value < 6
       ) SELECT value FROM c);
+"#;
+
+// Minimal dictionary covering the sample reader passages. Replaced wholesale
+// by the CC-CEDICT import; the reader queries this table either way.
+const SEED_DICT: &str = r#"
+INSERT INTO dictionary (simplified, traditional, pinyin, gloss) VALUES
+  ('我','我','wǒ','I; me'),
+  ('们','們','men','plural marker for pronouns'),
+  ('周','週','zhōu','week; cycle'),
+  ('末','末','mò','end; tip'),
+  ('一','一','yī','one'),
+  ('起','起','qǐ','to rise; to start'),
+  ('去','去','qù','to go; to leave'),
+  ('图','圖','tú','picture; drawing'),
+  ('书','書','shū','book; to write'),
+  ('馆','館','guǎn','establishment; building'),
+  ('看','看','kàn','to look; to read; to watch'),
+  ('你','你','nǐ','you'),
+  ('好','好','hǎo','good; well'),
+  ('很','很','hěn','very'),
+  ('高','高','gāo','tall; high'),
+  ('兴','興','xìng','mood; interest'),
+  ('认','認','rèn','to recognize'),
+  ('识','識','shí','to know; knowledge');
 "#;

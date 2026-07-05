@@ -74,6 +74,9 @@ decks        (id, name, hsk_level)   deck_cards (deck_id, card_id)
 progress     (hsk_level, chars_learned, words_learned, grammar_learned, …)
 
 import_versions (id, source, standard, version, imported_at)  -- versioned syllabus data
+
+dictionary   (id, simplified, traditional, pinyin, gloss)  -- CC-CEDICT lookup source,
+                                                           -- distinct from curated `words`
 ```
 
 Design decisions:

@@ -4,10 +4,11 @@
 // typed commands in `commands`. Every exposed command is an attack surface, so
 // we register them deliberately.
 
-mod commands;
-mod db;
-mod error;
-mod models;
+pub mod commands;
+pub mod db;
+pub mod dict_import;
+pub mod error;
+pub mod models;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -26,7 +27,11 @@ pub fn run() {
             app.manage(Db(Mutex::new(conn)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::get_today_summary])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_today_summary,
+            commands::lookup,
+            commands::annotate
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

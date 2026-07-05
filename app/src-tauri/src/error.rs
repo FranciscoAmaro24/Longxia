@@ -7,6 +7,7 @@ use std::fmt;
 pub enum AppError {
     Db(String),
     State(String),
+    Io(String),
 }
 
 impl fmt::Display for AppError {
@@ -14,6 +15,7 @@ impl fmt::Display for AppError {
         match self {
             AppError::Db(m) => write!(f, "database error: {m}"),
             AppError::State(m) => write!(f, "state error: {m}"),
+            AppError::Io(m) => write!(f, "io error: {m}"),
         }
     }
 }
@@ -23,6 +25,12 @@ impl std::error::Error for AppError {}
 impl From<rusqlite::Error> for AppError {
     fn from(e: rusqlite::Error) -> Self {
         AppError::Db(e.to_string())
+    }
+}
+
+impl From<std::io::Error> for AppError {
+    fn from(e: std::io::Error) -> Self {
+        AppError::Io(e.to_string())
     }
 }
 

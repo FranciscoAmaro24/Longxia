@@ -47,6 +47,24 @@ chinese-learning-app/
 - Node + npm
 - Xcode Command Line Tools (macOS)
 
+## Dictionary (CC-CEDICT)
+
+The reader's dictionary is [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict),
+licensed CC-BY-SA 4.0. The raw file (~124k entries, ~10 MB) is **not committed**. To fetch and
+import it into your local app database:
+
+```bash
+cd app/src-tauri
+curl -sL https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz -o resources/cedict.txt.gz
+gunzip -f resources/cedict.txt.gz
+cargo run --example import_cedict -- resources/cedict.txt \
+  "$HOME/Library/Application Support/com.longxia.study/longxia.db"
+```
+
+The importer parses the CC-CEDICT format and converts numbered pinyin (`ni3 hao3`) to tone marks
+(`nǐ hǎo`). Without this step the app falls back to a tiny built-in seed dictionary. (Bundling
+the dictionary into production builds is future work.)
+
 ## Roadmap
 
 See `PLAN.md` §7. Currently entering **Phase 1 - Foundation** (scaffold, SQLite schema,

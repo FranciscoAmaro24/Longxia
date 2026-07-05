@@ -1,0 +1,145 @@
+.screen {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--border-hair);
+}
+.zh {
+  font-family: var(--font-song);
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+.en {
+  color: var(--ink-muted);
+}
+
+.switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+/* positioned context for the lookup popover */
+.reader {
+  position: relative;
+}
+
+/* the passage is a wrapping row of ruby tokens (char over pinyin) */
+.passage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 3px;
+  row-gap: var(--space-4);
+}
+
+.token {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Han tokens are the click targets */
+.tokenBtn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.char {
+  font-family: var(--font-song);
+  font-size: var(--text-2xl);
+  line-height: 1.1;
+  border-bottom: 2px solid transparent;
+  transition: border-color 100ms ease;
+}
+.tokenBtn:hover .char,
+.tokenActive .char {
+  border-bottom-color: var(--correction);
+}
+
+.tokenPunct .char {
+  color: var(--ink-muted);
+}
+
+/* ambient pinyin: neutral ink so it does not collide with red/jade semantics */
+.py {
+  margin-top: 2px;
+  min-height: 1.1em;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+
+.translation {
+  margin-top: var(--space-5);
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}
+
+.hint {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+
+/* lookup popover: square, flat offset shadow (not a glow) */
+.popover {
+  position: absolute;
+  z-index: 10;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--paper-raised);
+  border: var(--border-ink);
+  box-shadow: 3px 3px 0 var(--line);
+  padding: var(--space-3);
+}
+.popHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.popHan {
+  font-family: var(--font-song);
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+.entry {
+  padding: var(--space-2) 0;
+  border-top: var(--border-hair);
+}
+.entry:first-of-type {
+  border-top: 0;
+}
+.entryPy {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--jade);
+}
+.entryGloss {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  margin-top: 1px;
+}
+.popMuted {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}

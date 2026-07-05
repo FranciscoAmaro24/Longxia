@@ -22,3 +22,21 @@ pub struct TodaySummary {
     pub due: i64,
     pub new_cards: i64,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DictEntry {
+    pub simplified: String,
+    pub traditional: Option<String>,
+    pub pinyin: Option<String>,
+    pub gloss: Option<String>,
+}
+
+/// One rendered unit of a passage: the character (or punctuation) plus its
+/// pinyin when known. Punctuation and unknown characters carry `pinyin: None`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Annotated {
+    pub text: String,
+    pub pinyin: Option<String>,
+}

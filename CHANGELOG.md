@@ -7,6 +7,42 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 6: CC-CEDICT import
+- **Added** `dict_import.rs`: CC-CEDICT line parser, numbered-to-tone-mark pinyin converter
+  (handles `u:` -> ü, neutral tone, capitals, literal numbers), and a transactional
+  `replace_dictionary_from_path` that reloads the `dictionary` table and stamps a version.
+- **Added** an offline import tool `examples/import_cedict.rs`
+  (`cargo run --example import_cedict -- <cedict> <db>`), which doubles as the verification path.
+- **Added** an `Io` error variant; made `db`/`dict_import` modules public for the example.
+- **Imported** the real CC-CEDICT (124,762 entries) into the app-data DB; verified sample
+  lookups render correct tone-marked pinyin (你 nǐ, 图书馆 tú shū guǎn, 龙虾 lóng xiā). The reader
+  now works across arbitrary Chinese text; no frontend change was needed.
+- **Docs:** README section on fetching/importing CC-CEDICT (CC-BY-SA); raw file gitignored.
+- **Verified** `cargo test` (6, incl. pinyin edge cases + import) and the real import run.
+
+### 2026-07-05 - Step 5.1: Reader ambient pinyin
+- **Added** the `annotate(text)` Rust command + `annotate_text(&Connection, &str)` (tested):
+  returns one entry per character with its pinyin (first sense), bounded to 2000 chars per call.
+- **Reworked** `ReaderScreen` to render each character as a ruby token with **pinyin shown
+  underneath, no click required**; tapping still opens the full-gloss popover. Ambient pinyin is
+  neutral ink so it does not collide with the reserved red (AI) / jade (progress) colors.
+- Falls back to plain characters if annotation is unavailable, and reloads on passage switch.
+
+### 2026-07-05 - Step 5: Reader (tap-to-lookup)
+- **Added** a `dictionary` table (CC-CEDICT shape: simplified/traditional/pinyin/gloss), separate
+  from the curated `words` table, with an index on `simplified` and a small seed covering the
+  sample passages. The real CC-CEDICT import populates the same table later.
+- **Added** the `lookup(query)` Rust command: input is trimmed, length-capped, and bound as a SQL
+  parameter; returns all senses. Core `dict_lookup(&Connection, &str)` is decoupled for testing.
+- **Added** `src/lib/api.ts` `lookup` wrapper + `DictEntry` type.
+- **Added** `src/features/reader/` - `ReaderScreen` with graded sample passages (`passages.ts`).
+  Tap any Han character to open a popover with pinyin + gloss; popover is positioned relative to
+  the reading pane, clamped in view, and closes on Escape / outside click. Punctuation is not
+  tappable. Word segmentation and tone coloring are noted as later work.
+- **Wired** the Read section in `App.tsx` to the real screen.
+- **Verified** `cargo test` (dictionary lookup hit + miss against the real schema) and
+  `npm run build` (tsc strict + vite) pass.
+
 ### 2026-07-05 - Step 4: Rust SQLite core, Today wired to real data
 - **Added** `rusqlite` (bundled SQLite) to the Rust core. SQLite lives entirely in Rust; the
   frontend never sees raw SQL, only typed commands.
