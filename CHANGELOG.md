@@ -7,6 +7,25 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-05 - Step 2: Design tokens + reusable primitives
+- **Added** `src/styles/tokens.css` - single source of truth for color, type, and spacing as
+  CSS custom properties. Light + dark via `prefers-color-scheme` and explicit `[data-theme]`
+  overrides. `--radius` is 0 (square by design).
+- **Rewrote** `src/styles/globals.css` - reset + base element styling only; imports tokens; no
+  hardcoded colors. Non-glowing keyboard focus, reduced-motion support.
+- **Added** primitives as isolated CSS-module components (restyle globally from tokens, or swap
+  one without touching others):
+  - `Button` - square; variants primary/secondary/ghost/quiet/accent; sizes sm/md; forwards ref,
+    defaults to `type="button"`.
+  - `Panel` - flat hairline-bordered surface with optional mono eyebrow header; no drop shadow.
+  - `Tag` - mono uppercase label; semantic variants (correction = AI, jade = progress).
+  - `TianGrid` - the 田字格 practice cell; sized via a CSS variable; accepts a char or children.
+- **Added** `src/lib/cn.ts` (dependency-free classnames joiner) and `src/components/index.ts`
+  barrel export.
+- **Replaced** the clean-slate placeholder `App.tsx` with a temporary primitives gallery for
+  in-app review (removed in Step 3).
+- **Verified** `npm run build` (tsc strict + vite) passes.
+
 ### 2026-07-03 - Step 1: Scaffold (clean slate)
 - **Added** `app/` - Tauri 2 + React 19 + TypeScript + Vite 7 project (Rust core). Identifier
   `com.longxia.study` (product name 龙虾 Lóngxiā).
