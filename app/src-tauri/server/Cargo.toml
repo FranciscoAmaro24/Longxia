@@ -12,7 +12,7 @@ path = "src/main.rs"
 # The single source of truth for all operations; the server is a transport over it.
 longxia-core = { path = "../core" }
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Same 0.4.x as core (unified), so the DateTime types in core signatures match.
@@ -20,3 +20,6 @@ chrono = "0.4"
 # The server holds the connection as shared state, so it needs the SQLite type.
 # Unified with core's `bundled` feature, so SQLite is compiled once.
 rusqlite = { version = "0.32", features = ["bundled"] }
+# Static file serving for the built web app (opt-in via LONGXIA_WEB_DIR), so one
+# binary can serve the SPA and the API from the same origin.
+tower-http = { version = "0.6", features = ["fs"] }

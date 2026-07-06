@@ -7,6 +7,79 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-06 - Step 9: Run + expose (one binary serves the app and API)
+- **Static serving:** `longxia-server` optionally serves the built web app. Set `LONGXIA_WEB_DIR`
+  to the `dist/` folder and it serves the SPA at `/` (with `index.html` fallback for client routes)
+  same-origin with the API, so one binary is a complete deployment and no CORS is needed.
+- **Routing refactor:** API routes are nested under `/api` with their own 404 fallback, so an
+  unknown `/api/*` returns `{"error":"not found"}` (404) instead of falling through to the SPA;
+  non-API paths serve the app. The CSP relaxes to `frame-ancestors 'none'` when serving the SPA
+  (so its own assets load) and stays strict (`default-src 'none'`) in API-only mode.
+- **Exposing:** bind `LONGXIA_ADDR=0.0.0.0:PORT` (still fail-closed: a token is required for a
+  non-local bind) and front it with a tunnel for HTTPS. Added `scripts/expose.sh` (builds the web,
+  generates a token, runs on `0.0.0.0`, prints cloudflared/ngrok/tailscale commands).
+- **Web token gate:** the browser build now shows a small on-brand access-token screen
+  (`features/auth/TokenGate`) when served over the network with no token, storing it via
+  `setApiToken` (never baked into the bundle). A server-rejected token (401) is cleared so the gate
+  reappears on reload. The Tauri app skips the gate entirely (it uses the local core).
+- **Verified** by binding `0.0.0.0` with `LONGXIA_WEB_DIR` set and curling: `/` and assets serve
+  the SPA (200), `/review` (unknown route) falls back to the SPA, `/api/health` is 200, `/api/today`
+  is 401 without the token and 200 with it, `/api/nope` returns 404 JSON (not the SPA), and the
+  server is reachable over the LAN IP (192.168.2.36) - confirming the `0.0.0.0` bind a tunnel needs.
+  Logs stayed path-only with no token leakage. `cargo test --workspace` (core 12, server 7) and
+  `npm run build` pass.
+
+### 2026-07-06 - Step 8: Server hardening + penetration test
+- **Added** `server/src/security.rs` (unit-tested): constant-time token comparison (`ct_eq`),
+  `Auth` (shared bearer token; disabled only when no token is set), and `AiLimiter` (fixed-window
+  per-minute rate limit + per-day cost cap; 0 disables a dimension).
+- **Auth, fail-closed:** every `/api` route except `/api/health` requires `Authorization: Bearer
+  <LONGXIA_TOKEN>`, checked in constant time. With no token set the server refuses to start on a
+  non-local bind (exit 1); on localhost it warns and runs open (dev). `LONGXIA_ALLOW_NO_AUTH=1`
+  overrides with a loud warning; a short token warns.
+- **AI rate limit + cost cap** on `/api/explain` (`LONGXIA_AI_PER_MIN`, default 20;
+  `LONGXIA_AI_PER_DAY`, default 500), checked before the Claude call; over-limit returns 429.
+- **Hardening layers:** 64KB request body limit (413 over that), a 35s whole-request timeout, a
+  30s reqwest client timeout in `core::ai` so a hung AI call cannot pin a worker, security response
+  headers on every response including errors (`X-Content-Type-Options: nosniff`, `X-Frame-Options:
+  DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a locked-down CSP), and
+  path-only request logging (never headers, query strings, or bodies, so tokens and user text stay
+  out of the logs). `ApiError` now carries its own status, so auth is 401 and limits are 429.
+- **Penetration test (curl, 17/17 passed):** fail-closed refusal on a non-local bind without a
+  token; 401 for missing/wrong/wrong-scheme tokens and 200 with the right one; SQL-injection
+  attempts in `lookup` return `[]` with the dictionary intact (parameterized queries); oversized
+  query -> `[]`, 70KB body -> 413, malformed JSON -> 400, unknown route -> 404, wrong method ->
+  405, path traversal -> 404, non-integer path param -> 400; the AI limiter returned 429 after the
+  configured per-minute count; security headers present on both 200 and 401; and the request log
+  contained no token, query text, or SQLi payloads.
+- **Frontend transport:** the browser `fetch` transport now attaches `Authorization: Bearer <token>`
+  so the web UI works against the secured server. The token is not baked into the bundle: it is set
+  at runtime via `setApiToken` (localStorage), with an optional `VITE_API_TOKEN` build-time fallback.
+  The Tauri host is unaffected (it calls the local core, no token). Local web dev can run the server
+  with `LONGXIA_ALLOW_NO_AUTH=1`.
+- **Verified** `cargo test --workspace` (core 12, server 7 incl. the new security tests) and
+  `npm run build`. See the README for the new environment variables.
+
+### 2026-07-06 - Step 7: Web frontend transport (same UI runs in a browser)
+- **Added** `src/lib/transport.ts` - a transport that runs the same typed API on two hosts:
+  inside the Tauri webview each call goes through `invoke`; in a plain browser it becomes a
+  `fetch` to `longxia-server`. Detection is by the Tauri internals the webview injects
+  (`__TAURI_INTERNALS__`), so the browser build never calls `invoke`.
+- **Reworked** `src/lib/api.ts`: each wrapper now declares one `CallSpec` carrying both forms
+  (the Tauri command + args and the equivalent HTTP method/path/query/body), plus a `fromHttp`
+  adapter where the shapes differ (`explain` returns a bare string via Tauri but `{explanation}`
+  over HTTP). Return types and function signatures are unchanged, so no feature/component code
+  changed. On the HTTP path a non-2xx response rejects with the server's plain `error` string, and
+  204 maps to `void`, matching the Tauri contract so `String(e)` renders errors identically.
+- **Added** a Vite dev proxy (`/api` -> `longxia-server`, target via `LONGXIA_SERVER`, default
+  `http://127.0.0.1:8787`) so a browser `npm run dev` avoids CORS. It is inert under `tauri dev`
+  (the webview uses `invoke` and never hits `/api`). Production/web uses same-origin `/api`;
+  `VITE_API_BASE` overrides the base for a split deploy.
+- **Verified** `npm run build` (tsc strict + vite) passes, and end-to-end through the real chain:
+  the Vite dev server serves the SPA (200) and proxies `/api/today`, `/api/lookup?q=`, and
+  `/api/annotate` to a running `longxia-server`, returning the same JSON the browser `fetch`
+  transport consumes. The live in-browser UI needs a running window to click through.
+
 ### 2026-07-06 - Step 6: Axum HTTP server
 - **Added** `app/src-tauri/server/` - a new binary crate `longxia-server` (Axum + Tokio) that
   exposes the core operations as JSON endpoints, reusing `longxia-core` so the web/hosted surface
@@ -25,8 +98,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Security posture:** binds to localhost and is intentionally unauthenticated and un-rate-limited.
   It must NOT be exposed (0.0.0.0 / a tunnel) until Step 8 adds an access token, per-user scoping,
   and an AI rate limit + cost cap. This is stated at the top of `main.rs` and in the README.
-- **Workspace:** set `default-members` so a plain `cargo test`/`cargo build` from `src-tauri`
-  covers every member (the core's 12 tests included), not just the root Tauri package.
+- **Workspace:** run the full suite with `cargo test --workspace` (a plain `cargo test` from
+  `src-tauri` only tests the root `app` package). We do not set `default-members` on purpose: it
+  would make `cargo run` (used by `npm run tauri dev`) ambiguous between the `app` and
+  `longxia-server` binaries; `default-run = "app"` keeps the app the default `cargo run` target.
 - **Verified** end-to-end against the running server with curl: today/lookup/annotate/review
   queue+submit (queue shrinks 24 -> 23; invalid rating -> error), notebook get/put/insight/delete,
   and explain returning a clean 502 when no key is set. `cargo test` (12 in core; app + server

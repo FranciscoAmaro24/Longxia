@@ -1,0 +1,63 @@
+.wrap {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.panel {
+  width: 100%;
+  max-width: 400px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.lead {
+  color: var(--ink-muted);
+  line-height: var(--leading);
+}
+
+.mark {
+  font-family: var(--font-song);
+  color: var(--ink);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.input {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  padding: var(--space-3);
+  background: var(--paper-sunken);
+  color: var(--ink);
+  border: var(--border-ink);
+  border-radius: var(--radius);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}

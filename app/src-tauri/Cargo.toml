@@ -1,10 +1,12 @@
 [workspace]
 # Nested members reusing the shared core: `core` is the library; `server` is the
 # Axum HTTP host. The root package (`app`, ".") is the Tauri host.
+#
+# We deliberately do NOT set `default-members`: it would pull `longxia-server`
+# into the default set, and a plain `cargo run` (which `npm run tauri dev` uses)
+# would then fail with "could not determine which binary to run" (app vs
+# longxia-server). Instead, run full tests with `cargo test --workspace`.
 members = ["core", "server"]
-# So a plain `cargo test`/`cargo build` from here covers every member (the core
-# tests live in `core`), not just the root package.
-default-members = [".", "core", "server"]
 
 [package]
 name = "app"
@@ -12,6 +14,10 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+# Make `cargo run` from this directory unambiguously launch the Tauri app even
+# though the workspace also builds the server binary. Keeps `npm run tauri dev`
+# working after the workspace split.
+default-run = "app"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

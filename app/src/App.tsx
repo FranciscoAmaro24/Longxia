@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { AppShell } from "./app/AppShell/AppShell";
 import { type SectionId } from "./app/nav";
+import { hasApiToken, isTauri } from "./lib/api";
+import { TokenGate } from "./features/auth/TokenGate";
 import { TodayScreen } from "./features/today/TodayScreen";
 import { ReaderScreen } from "./features/reader/ReaderScreen";
 import { WritingScreen } from "./features/writing/WritingScreen";
@@ -10,6 +12,13 @@ import { SpeakingScreen } from "./features/speaking/SpeakingScreen";
 
 function App() {
   const [active, setActive] = useState<SectionId>("today");
+  // In the browser, a token is needed to reach the server. The Tauri app talks
+  // to the local core and never needs one, so it is always authed.
+  const [authed, setAuthed] = useState(() => isTauri() || hasApiToken());
+
+  if (!authed) {
+    return <TokenGate onAuthed={() => setAuthed(true)} />;
+  }
 
   return (
     <AppShell active={active} onSelect={setActive}>

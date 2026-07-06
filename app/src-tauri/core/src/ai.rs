@@ -39,7 +39,12 @@ pub async fn explain(api_key: &str, text: &str) -> AppResult<String> {
         "messages": [{ "role": "user", "content": format!("Explain: {trimmed}") }],
     });
 
-    let resp = reqwest::Client::new()
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| AppError::Ai(format!("Could not build HTTP client: {e}")))?;
+
+    let resp = client
         .post(API_URL)
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")

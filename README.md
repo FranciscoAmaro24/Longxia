@@ -99,18 +99,82 @@ frontend (next step) and the Tauri app share one backend. Run it from the Rust w
 cd app/src-tauri
 # reuse the app's database (with the imported CC-CEDICT); omit to use ./longxia.db
 export LONGXIA_DB="$HOME/Library/Application Support/com.longxia.study/longxia.db"
-export ANTHROPIC_API_KEY=sk-ant-...   # optional, enables /api/explain
-cargo run -p longxia-server           # listens on http://127.0.0.1:8787
+export LONGXIA_TOKEN="$(openssl rand -hex 32)"   # shared access token (see below)
+export ANTHROPIC_API_KEY=sk-ant-...              # optional, enables /api/explain
+cargo run -p longxia-server                      # listens on http://127.0.0.1:8787
 ```
 
 Endpoints live under `/api` (`today`, `lookup?q=`, `annotate`, `review/queue`, `review`,
-`explain`, `note`, `note/insight`, `health`). Configure with `LONGXIA_DB`, `LONGXIA_ADDR`
-(default `127.0.0.1:8787`), and `ANTHROPIC_API_KEY`.
+`explain`, `note`, `note/insight`, `health`). All except `health` require the token.
 
-> **Do not expose this yet.** It binds to localhost and has no authentication or rate limiting.
-> Anyone who can reach the port can read/write the data and spend the Claude budget. An access
-> token, per-user scoping, and an AI rate limit + cost cap come before it is bound to `0.0.0.0`
-> or put behind a tunnel (see `ROADMAP.md`, Steps 8-9).
+Environment variables:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `LONGXIA_DB` | SQLite path (point at the app data-dir DB to reuse the imported dictionary) | `./longxia.db` |
+| `LONGXIA_ADDR` | bind address | `127.0.0.1:8787` |
+| `LONGXIA_TOKEN` | shared bearer token required on every `/api` route except `health` | none |
+| `LONGXIA_ALLOW_NO_AUTH` | set to `1` to run with no token (local dev only) | off |
+| `LONGXIA_AI_PER_MIN` | max `/api/explain` calls per minute (0 = off) | `20` |
+| `LONGXIA_AI_PER_DAY` | max `/api/explain` calls per day (0 = off) | `500` |
+| `ANTHROPIC_API_KEY` | key for `/api/explain` | none |
+
+Clients send `Authorization: Bearer $LONGXIA_TOKEN`. The token is compared in constant time; the
+server refuses to start on a non-local address when no token is set (override with
+`LONGXIA_ALLOW_NO_AUTH=1`, not recommended). Also enforced: an AI rate limit + daily cost cap, a
+64KB request-body limit, a request timeout, and hardening response headers.
+
+### Exposing it (host for others)
+
+The server can also serve the built web app, so one binary is a complete deployment: set
+`LONGXIA_WEB_DIR` to the web `dist/` and it serves the SPA at `/`, same-origin with the API. The
+one-command path:
+
+```bash
+scripts/expose.sh          # builds the web app, prints a token, runs on 0.0.0.0:8787
+```
+
+Then give it a public HTTPS URL with a tunnel (no router changes, and the server itself terminates
+no TLS):
+
+```bash
+cloudflared tunnel --url http://localhost:8787    # or: ngrok http 8787 / tailscale funnel 8787
+```
+
+Open the tunnel URL and enter the access token when the app asks (the web build shows a token gate;
+the token is stored locally, never baked into the bundle). To do it by hand instead of the script:
+
+```bash
+cd app && npm run build && cd src-tauri
+export LONGXIA_TOKEN="$(openssl rand -hex 32)"
+export LONGXIA_WEB_DIR="$(pwd)/../dist"
+LONGXIA_ADDR=0.0.0.0:8787 cargo run -p longxia-server
+```
+
+> The shared token gates access, but there is still one shared dataset; real per-user accounts are
+> Step 10 in `ROADMAP.md`. On the same Wi-Fi, others can also reach `http://<your-LAN-IP>:8787`
+> directly (no HTTPS).
+
+### Running the UI in a browser
+
+The React UI runs unchanged in a plain browser: `src/lib/transport.ts` detects the host and uses
+Tauri `invoke` inside the app but `fetch` to `longxia-server` in a browser. With the server running
+(above), start the web dev server in another terminal:
+
+```bash
+cd app
+npm run dev            # http://localhost:1420 (proxies /api to the server)
+```
+
+The Vite dev server proxies `/api` to `longxia-server` (override the target with `LONGXIA_SERVER`),
+so no CORS setup is needed. `npm run build` produces a static `dist/` that talks to a same-origin
+`/api`; set `VITE_API_BASE` at build time to point at a different server host.
+
+For local web dev the simplest path is to run the server with `LONGXIA_ALLOW_NO_AUTH=1` (localhost
+only) so no token is needed. Against a token-protected server, the browser must send the token: it
+is not baked into the bundle. Set it at runtime with `setApiToken(token)` (from `lib/api`, stored
+in `localStorage`), or bake one in for a trusted single-tenant deploy with `VITE_API_TOKEN` at build
+time. The Tauri app needs none of this - it calls the local core directly.
 
 ## Roadmap
 

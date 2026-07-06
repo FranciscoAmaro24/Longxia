@@ -1,9 +1,13 @@
 /**
- * Typed wrappers around the Rust commands. Keep every `invoke` behind a named
- * function with an explicit return type so call sites never pass raw command
- * strings and the TS/Rust contract stays in one place.
+ * Typed wrappers around the core operations. Each declares one `CallSpec` that
+ * works on both hosts: the Tauri command (in the app) and the equivalent HTTP
+ * request against `longxia-server` (in the browser). Call sites import these
+ * named functions and never know which transport is active. The TS/Rust
+ * contract stays in this one file; the dispatch lives in `transport.ts`.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "./transport";
+
+export { isTauri, setApiToken, hasApiToken } from "./transport";
 
 export interface Ring {
   key: string;
@@ -20,7 +24,10 @@ export interface TodaySummary {
 }
 
 export function getTodaySummary(): Promise<TodaySummary> {
-  return invoke<TodaySummary>("get_today_summary");
+  return call<TodaySummary>({
+    command: "get_today_summary",
+    http: { method: "GET", path: "/api/today" },
+  });
 }
 
 export interface DictEntry {
@@ -32,7 +39,11 @@ export interface DictEntry {
 
 /** Look up a headword (usually a single tapped character). */
 export function lookup(query: string): Promise<DictEntry[]> {
-  return invoke<DictEntry[]>("lookup", { query });
+  return call<DictEntry[]>({
+    command: "lookup",
+    args: { query },
+    http: { method: "GET", path: "/api/lookup", query: { q: query } },
+  });
 }
 
 export interface Annotated {
@@ -42,7 +53,11 @@ export interface Annotated {
 
 /** Annotate a passage with per-character pinyin for ambient display. */
 export function annotate(text: string): Promise<Annotated[]> {
-  return invoke<Annotated[]>("annotate", { text });
+  return call<Annotated[]>({
+    command: "annotate",
+    args: { text },
+    http: { method: "POST", path: "/api/annotate", body: { text } },
+  });
 }
 
 export interface ReviewCard {
@@ -66,11 +81,18 @@ export interface ReviewResult {
 export type Rating = 1 | 2 | 3 | 4;
 
 export function getReviewQueue(): Promise<ReviewCard[]> {
-  return invoke<ReviewCard[]>("get_review_queue");
+  return call<ReviewCard[]>({
+    command: "get_review_queue",
+    http: { method: "GET", path: "/api/review/queue" },
+  });
 }
 
 export function reviewCard(cardId: number, rating: Rating): Promise<ReviewResult> {
-  return invoke<ReviewResult>("review_card", { cardId, rating });
+  return call<ReviewResult>({
+    command: "review_card",
+    args: { cardId, rating },
+    http: { method: "POST", path: "/api/review", body: { cardId, rating } },
+  });
 }
 
 // --- Notebook + AI insights ---
@@ -90,15 +112,28 @@ export interface Note {
 
 /** Explain a span of Chinese text with Claude (red-pen insight). */
 export function explain(text: string): Promise<string> {
-  return invoke<string>("explain", { text });
+  return call<string>({
+    command: "explain",
+    args: { text },
+    http: { method: "POST", path: "/api/explain", body: { text } },
+    // The command returns the string directly; the endpoint wraps it.
+    fromHttp: (raw) => (raw as { explanation: string }).explanation,
+  });
 }
 
 export function getNote(): Promise<Note> {
-  return invoke<Note>("get_note");
+  return call<Note>({
+    command: "get_note",
+    http: { method: "GET", path: "/api/note" },
+  });
 }
 
 export function saveNote(text: string): Promise<void> {
-  return invoke<void>("save_note", { text });
+  return call<void>({
+    command: "save_note",
+    args: { text },
+    http: { method: "PUT", path: "/api/note", body: { text } },
+  });
 }
 
 export function addInsight(
@@ -107,9 +142,17 @@ export function addInsight(
   start: number,
   end: number,
 ): Promise<Insight> {
-  return invoke<Insight>("add_insight", { snippet, explanation, start, end });
+  return call<Insight>({
+    command: "add_insight",
+    args: { snippet, explanation, start, end },
+    http: { method: "POST", path: "/api/note/insight", body: { snippet, explanation, start, end } },
+  });
 }
 
 export function deleteInsight(id: number): Promise<void> {
-  return invoke<void>("delete_insight", { id });
+  return call<void>({
+    command: "delete_insight",
+    args: { id },
+    http: { method: "DELETE", path: `/api/note/insight/${id}` },
+  });
 }
