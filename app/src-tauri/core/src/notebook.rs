@@ -1,14 +1,13 @@
 //! Notebook persistence. A single note (id = 1) with its red-pen AI insights,
 //! stored in the `notes` and `note_spans` tables. Each insight keeps the
 //! selected snippet + explanation (as JSON in `ai_insight_json`) and the span
-//! offsets it was created from.
+//! offsets it was created from. Pure functions over a `Connection`; hosts wrap
+//! them (locking, request plumbing) on their side.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
 
-use crate::db::Db;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::models::{Insight, Note};
 
 const NOTE_ID: i64 = 1;
@@ -20,45 +19,6 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-fn lock<'a>(db: &'a State<'_, Db>) -> AppResult<std::sync::MutexGuard<'a, Connection>> {
-    db.0
-        .lock()
-        .map_err(|_| AppError::State("connection lock poisoned".into()))
-}
-
-#[tauri::command]
-pub fn get_note(db: State<'_, Db>) -> AppResult<Note> {
-    let conn = lock(&db)?;
-    load_note(&conn)
-}
-
-#[tauri::command]
-pub fn save_note(db: State<'_, Db>, text: String) -> AppResult<()> {
-    let conn = lock(&db)?;
-    store_note(&conn, &text)
-}
-
-#[tauri::command]
-pub fn add_insight(
-    db: State<'_, Db>,
-    snippet: String,
-    explanation: String,
-    start: i64,
-    end: i64,
-) -> AppResult<Insight> {
-    let conn = lock(&db)?;
-    store_insight(&conn, &snippet, &explanation, start, end)
-}
-
-#[tauri::command]
-pub fn delete_insight(db: State<'_, Db>, id: i64) -> AppResult<()> {
-    lock(&db)?
-        .execute("DELETE FROM note_spans WHERE id = ?1 AND note_id = ?2", params![id, NOTE_ID])?;
-    Ok(())
-}
-
-// --- core, decoupled from Tauri state for testing ---
-
 fn ensure_note(conn: &Connection) -> AppResult<()> {
     let now = now_secs();
     conn.execute(
@@ -68,7 +28,7 @@ fn ensure_note(conn: &Connection) -> AppResult<()> {
     Ok(())
 }
 
-pub(crate) fn store_note(conn: &Connection, text: &str) -> AppResult<()> {
+pub fn store_note(conn: &Connection, text: &str) -> AppResult<()> {
     let now = now_secs();
     conn.execute(
         "INSERT INTO notes (id, body_json, created, updated) VALUES (?1, ?2, ?3, ?3) \
@@ -78,7 +38,7 @@ pub(crate) fn store_note(conn: &Connection, text: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub(crate) fn store_insight(
+pub fn store_insight(
     conn: &Connection,
     snippet: &str,
     explanation: &str,
@@ -100,7 +60,17 @@ pub(crate) fn store_insight(
     })
 }
 
-pub(crate) fn load_note(conn: &Connection) -> AppResult<Note> {
+/// Remove one insight from the single note. Scoped to `NOTE_ID` so an id from
+/// another note can never be deleted here.
+pub fn delete_insight(conn: &Connection, id: i64) -> AppResult<()> {
+    conn.execute(
+        "DELETE FROM note_spans WHERE id = ?1 AND note_id = ?2",
+        params![id, NOTE_ID],
+    )?;
+    Ok(())
+}
+
+pub fn load_note(conn: &Connection) -> AppResult<Note> {
     let text: String = conn
         .query_row("SELECT body_json FROM notes WHERE id = ?1", [NOTE_ID], |r| {
             r.get::<_, Option<String>>(0)
@@ -161,7 +131,7 @@ mod tests {
         // newest first
         assert_eq!(note.insights[0].snippet, "对象");
 
-        conn.execute("DELETE FROM note_spans WHERE id = ?1", [a.id]).unwrap();
+        delete_insight(&conn, a.id).unwrap();
         assert_eq!(load_note(&conn).unwrap().insights.len(), 1);
     }
 }

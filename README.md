@@ -12,7 +12,11 @@ Three learning sections: **Reading**, **Writing**, and **Speaking**.
 **Core app working.** All six sections are built: Today (HSK progress from SQLite), Reader
 (tap-to-lookup + ambient pinyin over CC-CEDICT), Writing (Hanzi Writer 田字格), Review (FSRS with
 typed recall), Notebook (autosave + red-pen Claude insights), and Speaking (TTS shadowing + tone
-contours + record/playback). Rust core with SQLite; frontend in React. Next: polish and packaging.
+contours + record/playback). Rust core with SQLite; frontend in React.
+
+**Phase 2 underway (make it hostable).** The Rust core is now a standalone `longxia-core` crate
+(host-independent functions over a SQLite connection), shared by the Tauri app and, next, an Axum
+HTTP server that reuses the same operations. See `ROADMAP.md`.
 
 ## Key decisions so far
 
@@ -41,7 +45,12 @@ chinese-learning-app/
 ├── PLAN.md            ← full technical + curriculum plan
 ├── design/
 │   └── wireframes.html  ← design direction + six core screens (open in a browser)
-└── (app scaffold - added in Phase 1)
+└── app/               ← Tauri 2 + React + TypeScript frontend
+    ├── src/             React UI (features/, components/, styles/, lib/)
+    └── src-tauri/       Rust workspace
+        ├── src/         Tauri binary: managed state + #[tauri::command] wrappers
+        ├── core/        longxia-core: host-independent logic (db, ops, srs, ai, ...)
+        └── server/      longxia-server: Axum HTTP host exposing the same core
 ```
 
 ## Prerequisites (already installed on this machine)
@@ -81,10 +90,33 @@ cd app && npm run tauri dev
 Model defaults to `claude-haiku-4-5` (cheapest). Without the key set, the notebook still works;
 only the "Explain" action reports that the key is missing.
 
+## HTTP server (web/hosted surface)
+
+`longxia-server` is an Axum binary that exposes the same core operations as JSON, so a web
+frontend (next step) and the Tauri app share one backend. Run it from the Rust workspace:
+
+```bash
+cd app/src-tauri
+# reuse the app's database (with the imported CC-CEDICT); omit to use ./longxia.db
+export LONGXIA_DB="$HOME/Library/Application Support/com.longxia.study/longxia.db"
+export ANTHROPIC_API_KEY=sk-ant-...   # optional, enables /api/explain
+cargo run -p longxia-server           # listens on http://127.0.0.1:8787
+```
+
+Endpoints live under `/api` (`today`, `lookup?q=`, `annotate`, `review/queue`, `review`,
+`explain`, `note`, `note/insight`, `health`). Configure with `LONGXIA_DB`, `LONGXIA_ADDR`
+(default `127.0.0.1:8787`), and `ANTHROPIC_API_KEY`.
+
+> **Do not expose this yet.** It binds to localhost and has no authentication or rate limiting.
+> Anyone who can reach the port can read/write the data and spend the Claude budget. An access
+> token, per-user scoping, and an AI rate limit + cost cap come before it is bound to `0.0.0.0`
+> or put behind a tunnel (see `ROADMAP.md`, Steps 8-9).
+
 ## Roadmap
 
-See `PLAN.md` §7. Currently entering **Phase 1 - Foundation** (scaffold, SQLite schema,
-dictionary + stroke-data import, HSK level structure).
+See `ROADMAP.md` for the MVP-to-production plan. The MVP (all six sections) is built; we are in
+**Phase 2 - make it hostable**: `longxia-core` is extracted (Step 5); next is an Axum HTTP server
+reusing the core (Step 6), then minimal auth + AI rate-limiting (Step 8) before exposing it.
 
 ## Notes for the maintainer
 

@@ -1,5 +1,6 @@
-//! Data returned to the frontend. `camelCase` so the TypeScript side reads
-//! naturally. These are view models, decoupled from the table layout.
+//! Data returned to a host. `camelCase` so the TypeScript side reads naturally
+//! whether it arrives via Tauri `invoke` or an HTTP JSON body. These are view
+//! models, decoupled from the table layout.
 
 use serde::Serialize;
 

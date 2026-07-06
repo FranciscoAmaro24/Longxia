@@ -7,6 +7,52 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-06 - Step 6: Axum HTTP server
+- **Added** `app/src-tauri/server/` - a new binary crate `longxia-server` (Axum + Tokio) that
+  exposes the core operations as JSON endpoints, reusing `longxia-core` so the web/hosted surface
+  and the Tauri app can never drift. Registered as the workspace's second member.
+- **Endpoints** (all under `/api`): `GET today`, `GET lookup?q=`, `POST annotate`,
+  `GET review/queue`, `POST review` `{cardId, rating}`, `POST explain` `{text}`, `GET/PUT note`,
+  `POST note/insight`, `DELETE note/insight/{id}`, plus `GET health`. Core view models serialize
+  camelCase, so responses match the shapes the frontend already consumes.
+- **State:** a single `Arc<Mutex<Connection>>`; no lock is ever held across an `.await`, so handler
+  futures stay `Send` and the DB is never locked during the network-bound AI call (which takes no
+  DB lock at all). Errors map through an `ApiError` newtype (AI -> 502, others -> 500) returning
+  `{ "error": ... }`.
+- **Config via env:** `LONGXIA_DB` (SQLite path, default `./longxia.db`; point it at the app's
+  data-dir DB to reuse the imported CC-CEDICT), `LONGXIA_ADDR` (default `127.0.0.1:8787`),
+  `ANTHROPIC_API_KEY` (read once at startup, passed to the core; never sent to a client).
+- **Security posture:** binds to localhost and is intentionally unauthenticated and un-rate-limited.
+  It must NOT be exposed (0.0.0.0 / a tunnel) until Step 8 adds an access token, per-user scoping,
+  and an AI rate limit + cost cap. This is stated at the top of `main.rs` and in the README.
+- **Workspace:** set `default-members` so a plain `cargo test`/`cargo build` from `src-tauri`
+  covers every member (the core's 12 tests included), not just the root Tauri package.
+- **Verified** end-to-end against the running server with curl: today/lookup/annotate/review
+  queue+submit (queue shrinks 24 -> 23; invalid rating -> error), notebook get/put/insight/delete,
+  and explain returning a clean 502 when no key is set. `cargo test` (12 in core; app + server
+  compile) and `npm run build` still pass. No frontend change yet (that is Step 7).
+
+### 2026-07-06 - Step 5: Extract the `longxia-core` crate (Phase 2 begins)
+- **Added** `app/src-tauri/core/` - a new library crate `longxia-core` holding all the
+  host-independent logic: `db` (schema + seed + migrations), `ops` (today/lookup/annotate/review
+  queue/apply review), `notebook`, `srs`, `dict_import`, `ai`, `models`, `error`. Every operation
+  is a plain function over a `rusqlite::Connection` (plus a clock or an API key where needed), so
+  the same core will back both the Tauri app and the Axum server (Step 6). No Tauri dependency.
+- **Turned** `src-tauri` into a Cargo workspace whose root package is the Tauri binary and whose
+  first member is `core`; the server binary will join as a second member. The Tauri binary now
+  owns only the `Db` managed-state newtype and the thin `#[tauri::command]` wrappers in
+  `commands.rs`, each of which locks the connection and delegates to a core function.
+- **Moved** input validation into the core: `ops::lookup` trims and length-caps the query itself
+  (was in the Tauri command), so the server enforces the same limits. Added `notebook::delete_insight`
+  as a core function (was inline SQL in the command).
+- **Parameterized** the Claude key: `ai::explain(api_key, text)` no longer reads the environment;
+  the host supplies the key. The Tauri wrapper still reads `ANTHROPIC_API_KEY` and passes it, so
+  behavior is unchanged, but the core no longer touches process env - the server will hold and gate
+  the key instead (Steps 8/11).
+- **Repointed** the `import_cedict` example at `longxia_core`; the documented run command is unchanged.
+- **Verified** `cargo test` (12 in core: the 11 that moved plus a new `lookup` validation test; the
+  binary and example compile) and `npm run build` (tsc strict + vite) pass. No frontend change.
+
 ### 2026-07-05 - Step 10: Speaking
 - **Added** `features/speaking/` - `SpeakingScreen` with system-voice TTS shadowing
   (`SpeechSynthesis`, zh-CN, slow/normal), per-syllable tone contours drawn from the pinyin

@@ -202,7 +202,7 @@ mod tests {
         let n = insert_entries(&conn, Cursor::new(sample)).unwrap();
         assert_eq!(n, 2);
 
-        let hits = crate::commands::dict_lookup(&conn, "书").unwrap();
+        let hits = crate::ops::dict_lookup(&conn, "书").unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].pinyin.as_deref(), Some("shū"));
         assert_eq!(hits[0].gloss.as_deref(), Some("book; to write"));

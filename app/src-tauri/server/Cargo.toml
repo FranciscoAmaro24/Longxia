@@ -1,0 +1,22 @@
+[package]
+name = "longxia-server"
+version = "0.1.0"
+edition = "2021"
+description = "Axum HTTP server exposing the Lóngxiā core operations as JSON endpoints. Reuses longxia-core so the same logic backs the Tauri app and the web/hosted surface. Bind to localhost only until Step 8 (auth + AI rate limit) lands."
+
+[[bin]]
+name = "longxia-server"
+path = "src/main.rs"
+
+[dependencies]
+# The single source of truth for all operations; the server is a transport over it.
+longxia-core = { path = "../core" }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Same 0.4.x as core (unified), so the DateTime types in core signatures match.
+chrono = "0.4"
+# The server holds the connection as shared state, so it needs the SQLite type.
+# Unified with core's `bundled` feature, so SQLite is compiled once.
+rusqlite = { version = "0.32", features = ["bundled"] }

@@ -9,7 +9,7 @@
 use std::env;
 use std::path::Path;
 
-use app_lib::{db, dict_import};
+use longxia_core::{db, dict_import};
 use rusqlite::Connection;
 
 fn main() {

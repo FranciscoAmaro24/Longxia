@@ -1,355 +1,97 @@
-//! Tauri commands. Each is a small, typed boundary; inputs (when present) are
-//! bound as SQL parameters, never string-concatenated.
+//! Tauri commands: the host boundary. Each locks the shared connection and
+//! delegates to a `longxia_core` operation. Input validation and SQL live in
+//! the core (so the server enforces the same rules); these wrappers only bridge
+//! Tauri state, the clock, and the API key into the core functions.
 
-use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::MutexGuard;
+
+use chrono::Utc;
+use rusqlite::Connection;
 use tauri::State;
 
-use crate::db::Db;
-use crate::error::{AppError, AppResult};
-use crate::models::{Annotated, DictEntry, ReviewCard, ReviewResult, Ring, TodaySummary};
-use crate::srs::{self, StoredCard};
+use longxia_core::error::{AppError, AppResult};
+use longxia_core::models::{Annotated, DictEntry, Insight, Note, ReviewCard, ReviewResult, TodaySummary};
+use longxia_core::{ai, notebook, ops};
 
-/// Longest query we will look up. The reader taps single characters, so this
-/// is a generous cap that also bounds any accidental/hostile input.
-const MAX_QUERY_CHARS: usize = 16;
+use crate::Db;
 
-/// Upper bound on characters annotated in one call, to bound work per request.
-const MAX_ANNOTATE_CHARS: usize = 2000;
-
-/// Whether a character is a CJK ideograph worth a dictionary lookup.
-fn is_han(c: char) -> bool {
-    matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0x20000..=0x2A6DF)
+/// Lock the managed connection, mapping a poisoned lock to a readable error.
+fn lock<'a>(db: &'a State<'_, Db>) -> AppResult<MutexGuard<'a, Connection>> {
+    db.0
+        .lock()
+        .map_err(|_| AppError::State("connection lock poisoned".into()))
 }
 
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
-/// Everything the Today screen needs, computed from the database:
-/// per-metric progress toward the current level's targets, plus due/new counts.
 #[tauri::command]
 pub fn get_today_summary(db: State<'_, Db>) -> AppResult<TodaySummary> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
-    today_summary(&conn)
+    let conn = lock(&db)?;
+    ops::today_summary(&conn)
 }
 
-/// Core query, decoupled from Tauri state so it is unit-testable.
-pub(crate) fn today_summary(conn: &Connection) -> AppResult<TodaySummary> {
-    let level: i64 = conn
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'current_level'",
-            [],
-            |r| r.get::<_, String>(0),
-        )
-        .optional()?
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1);
-
-    let (syl_t, chr_t, wrd_t, grm_t): (i64, i64, i64, i64) = conn
-        .query_row(
-            "SELECT syllables, characters, words, grammar FROM hsk_targets WHERE level = ?1",
-            [level],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .optional()?
-        .unwrap_or((0, 0, 0, 0));
-
-    let (chr_l, wrd_l, grm_l, syl_l): (i64, i64, i64, i64) = conn
-        .query_row(
-            "SELECT chars_learned, words_learned, grammar_learned, syllables_learned \
-             FROM progress WHERE hsk_level = ?1",
-            [level],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .optional()?
-        .unwrap_or((0, 0, 0, 0));
-
-    let now = now_secs();
-    let due: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM cards WHERE due IS NOT NULL AND due <= ?1 AND state != 'new'",
-        [now],
-        |r| r.get(0),
-    )?;
-    let new_cards: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM cards WHERE state = 'new'",
-        [],
-        |r| r.get(0),
-    )?;
-
-    let rings = vec![
-        Ring { key: "char".into(), zh: "汉字".into(), learned: chr_l, target: chr_t },
-        Ring { key: "word".into(), zh: "词语".into(), learned: wrd_l, target: wrd_t },
-        Ring { key: "grammar".into(), zh: "语法".into(), learned: grm_l, target: grm_t },
-        Ring { key: "syllable".into(), zh: "音节".into(), learned: syl_l, target: syl_t },
-    ];
-
-    Ok(TodaySummary { level, rings, due, new_cards })
-}
-
-/// Dictionary lookup for a headword (typically a single tapped character).
-/// Returns every matching sense. Input is validated and bound as a parameter.
 #[tauri::command]
 pub fn lookup(db: State<'_, Db>, query: String) -> AppResult<Vec<DictEntry>> {
-    let q = query.trim();
-    if q.is_empty() || q.chars().count() > MAX_QUERY_CHARS {
-        return Ok(Vec::new());
-    }
-    let conn = db
-        .0
-        .lock()
-        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
-    dict_lookup(&conn, q)
+    let conn = lock(&db)?;
+    ops::lookup(&conn, &query)
 }
 
-/// Annotate a passage: one entry per character with its pinyin (first sense),
-/// so the reader can show ambient pinyin without a lookup per character.
 #[tauri::command]
 pub fn annotate(db: State<'_, Db>, text: String) -> AppResult<Vec<Annotated>> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
-    annotate_text(&conn, &text)
+    let conn = lock(&db)?;
+    ops::annotate_text(&conn, &text)
 }
 
-/// Core annotation, decoupled from Tauri state for testing.
-pub(crate) fn annotate_text(conn: &Connection, text: &str) -> AppResult<Vec<Annotated>> {
-    let mut stmt = conn.prepare(
-        "SELECT pinyin FROM dictionary WHERE simplified = ?1 ORDER BY id LIMIT 1",
-    )?;
-    let mut out = Vec::new();
-    for ch in text.chars().take(MAX_ANNOTATE_CHARS) {
-        let pinyin = if is_han(ch) {
-            stmt.query_row([&ch.to_string()], |r| r.get::<_, Option<String>>(0))
-                .optional()?
-                .flatten()
-        } else {
-            None
-        };
-        out.push(Annotated { text: ch.to_string(), pinyin });
-    }
-    Ok(out)
-}
-
-/// Core lookup, decoupled from Tauri state for testing.
-pub(crate) fn dict_lookup(conn: &Connection, q: &str) -> AppResult<Vec<DictEntry>> {
-    let mut stmt = conn.prepare(
-        "SELECT simplified, traditional, pinyin, gloss \
-         FROM dictionary WHERE simplified = ?1 ORDER BY id",
-    )?;
-    let rows = stmt.query_map([q], |r| {
-        Ok(DictEntry {
-            simplified: r.get(0)?,
-            traditional: r.get(1)?,
-            pinyin: r.get(2)?,
-            gloss: r.get(3)?,
-        })
-    })?;
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
-    }
-    Ok(out)
-}
-
-/// The review queue: due cards and new cards, with content and rating previews.
 #[tauri::command]
 pub fn get_review_queue(db: State<'_, Db>) -> AppResult<Vec<ReviewCard>> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
-    review_queue(&conn, Utc::now())
+    let conn = lock(&db)?;
+    ops::review_queue(&conn, Utc::now())
 }
 
-/// Rate a card (1=Again .. 4=Easy): reschedule it and log the review.
 #[tauri::command]
 pub fn review_card(db: State<'_, Db>, card_id: i64, rating: i64) -> AppResult<ReviewResult> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|_| AppError::State("connection lock poisoned".into()))?;
-    apply_review(&conn, card_id, rating, Utc::now())
+    let conn = lock(&db)?;
+    ops::apply_review(&conn, card_id, rating, Utc::now())
 }
 
-fn load_stored(conn: &Connection, id: i64) -> AppResult<Option<StoredCard>> {
-    conn.query_row(
-        "SELECT stability, difficulty, due, reps, lapses, state, last_review \
-         FROM cards WHERE id = ?1",
-        [id],
-        |r| {
-            Ok(StoredCard {
-                stability: r.get(0)?,
-                difficulty: r.get(1)?,
-                due: r.get(2)?,
-                reps: r.get(3)?,
-                lapses: r.get(4)?,
-                state: r.get(5)?,
-                last_review: r.get(6)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn first_sense(conn: &Connection, word: &str) -> AppResult<(Option<String>, Option<String>)> {
-    let row = conn
-        .query_row(
-            "SELECT pinyin, gloss FROM dictionary WHERE simplified = ?1 LIMIT 1",
-            [word],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+/// AI insight. The key stays server-side of the frontend: it is read from the
+/// environment here and passed to the core, never exposed to the UI bundle.
+#[tauri::command]
+pub async fn explain(text: String) -> AppResult<String> {
+    let key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
+        AppError::Ai(
+            "ANTHROPIC_API_KEY is not set. Set it in the environment before launching the app to \
+             enable AI insights."
+                .into(),
         )
-        .optional()?;
-    Ok(row.unwrap_or((None, None)))
+    })?;
+    ai::explain(&key, &text).await
 }
 
-pub(crate) fn review_queue(conn: &Connection, now: DateTime<Utc>) -> AppResult<Vec<ReviewCard>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, headword, stability, difficulty, due, reps, lapses, state, last_review \
-         FROM cards \
-         WHERE headword IS NOT NULL AND (state = 'new' OR (due IS NOT NULL AND due <= ?1)) \
-         ORDER BY (state = 'new') ASC, due ASC LIMIT 100",
-    )?;
-    let raw: Vec<(i64, String, StoredCard)> = stmt
-        .query_map([now.timestamp()], |r| {
-            Ok((
-                r.get(0)?,
-                r.get(1)?,
-                StoredCard {
-                    stability: r.get(2)?,
-                    difficulty: r.get(3)?,
-                    due: r.get(4)?,
-                    reps: r.get(5)?,
-                    lapses: r.get(6)?,
-                    state: r.get(7)?,
-                    last_review: r.get(8)?,
-                },
-            ))
-        })?
-        .collect::<Result<_, _>>()?;
-
-    let mut out = Vec::with_capacity(raw.len());
-    for (id, headword, stored) in raw {
-        let (again, hard, good, easy) = srs::preview_secs(&stored, now);
-        let (pinyin, gloss) = first_sense(conn, &headword)?;
-        out.push(ReviewCard { id, headword, pinyin, gloss, again, hard, good, easy });
-    }
-    Ok(out)
+#[tauri::command]
+pub fn get_note(db: State<'_, Db>) -> AppResult<Note> {
+    let conn = lock(&db)?;
+    notebook::load_note(&conn)
 }
 
-pub(crate) fn apply_review(
-    conn: &Connection,
-    card_id: i64,
-    rating_num: i64,
-    now: DateTime<Utc>,
-) -> AppResult<ReviewResult> {
-    let rating = srs::rating_from(rating_num)
-        .ok_or_else(|| AppError::State(format!("invalid rating {rating_num}")))?;
-    let stored = load_stored(conn, card_id)?
-        .ok_or_else(|| AppError::State(format!("card {card_id} not found")))?;
-
-    let s = srs::schedule(&stored, rating, now);
-    conn.execute(
-        "UPDATE cards SET stability = ?1, difficulty = ?2, due = ?3, reps = ?4, \
-         lapses = ?5, state = ?6, last_review = ?7 WHERE id = ?8",
-        params![s.stability, s.difficulty, s.due, s.reps, s.lapses, s.state, s.last_review, card_id],
-    )?;
-    conn.execute(
-        "INSERT INTO reviews (card_id, rating, reviewed_at) VALUES (?1, ?2, ?3)",
-        params![card_id, rating_num, now.timestamp()],
-    )?;
-    Ok(ReviewResult { due: s.due, state: s.state })
+#[tauri::command]
+pub fn save_note(db: State<'_, Db>, text: String) -> AppResult<()> {
+    let conn = lock(&db)?;
+    notebook::store_note(&conn, &text)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rusqlite::Connection;
+#[tauri::command]
+pub fn add_insight(
+    db: State<'_, Db>,
+    snippet: String,
+    explanation: String,
+    start: i64,
+    end: i64,
+) -> AppResult<Insight> {
+    let conn = lock(&db)?;
+    notebook::store_insight(&conn, &snippet, &explanation, start, end)
+}
 
-    /// Exercises the real schema + seed and the actual query the command runs.
-    #[test]
-    fn today_summary_reflects_seed() {
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::apply(&conn).unwrap();
-
-        let s = today_summary(&conn).unwrap();
-
-        assert_eq!(s.level, 3);
-        assert_eq!(s.due, 18);
-        assert_eq!(s.new_cards, 6);
-        assert_eq!(s.rings.len(), 4);
-
-        let chars = s.rings.iter().find(|r| r.key == "char").unwrap();
-        assert_eq!(chars.learned, 674);
-        assert_eq!(chars.target, 900);
-        assert_eq!(chars.zh, "汉字");
-    }
-
-    #[test]
-    fn dict_lookup_finds_and_misses() {
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::apply(&conn).unwrap();
-
-        let hits = dict_lookup(&conn, "书").unwrap();
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].pinyin.as_deref(), Some("shū"));
-        assert_eq!(hits[0].traditional.as_deref(), Some("書"));
-
-        assert!(dict_lookup(&conn, "zzz").unwrap().is_empty());
-    }
-
-    #[test]
-    fn annotate_marks_pinyin_and_skips_punct() {
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::apply(&conn).unwrap();
-
-        let toks = annotate_text(&conn, "书。").unwrap();
-        assert_eq!(toks.len(), 2);
-        assert_eq!(toks[0].text, "书");
-        assert_eq!(toks[0].pinyin.as_deref(), Some("shū"));
-        assert_eq!(toks[1].text, "。");
-        assert!(toks[1].pinyin.is_none());
-    }
-
-    #[test]
-    fn review_flow_reschedules_and_shrinks_queue() {
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::apply(&conn).unwrap();
-        let now = Utc::now();
-
-        let queue = review_queue(&conn, now).unwrap();
-        assert_eq!(queue.len(), 24); // 18 due + 6 new
-        let first = queue[0].id;
-
-        let res = apply_review(&conn, first, 3, now).unwrap(); // Good
-        assert!(res.due >= now.timestamp());
-        assert_ne!(res.state, "new");
-
-        // the reviewed card is no longer due
-        let after = review_queue(&conn, now).unwrap();
-        assert_eq!(after.len(), 23);
-
-        // a review row was logged
-        let logged: i64 = conn
-            .query_row("SELECT COUNT(*) FROM reviews WHERE card_id = ?1", [first], |r| r.get(0))
-            .unwrap();
-        assert_eq!(logged, 1);
-    }
-
-    #[test]
-    fn invalid_rating_is_rejected() {
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::apply(&conn).unwrap();
-        let id = review_queue(&conn, Utc::now()).unwrap()[0].id;
-        assert!(apply_review(&conn, id, 9, Utc::now()).is_err());
-    }
+#[tauri::command]
+pub fn delete_insight(db: State<'_, Db>, id: i64) -> AppResult<()> {
+    let conn = lock(&db)?;
+    notebook::delete_insight(&conn, id)
 }

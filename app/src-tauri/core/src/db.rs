@@ -1,10 +1,10 @@
 //! SQLite access. Owns the schema (from PLAN.md section 2) and dev seed data.
-//! The connection is held behind a Mutex in Tauri managed state; all access
-//! goes through typed commands.
+//! A host opens the connection and decides how to hold it (the Tauri app keeps
+//! it behind a Mutex in managed state); all access goes through the operations
+//! in `ops`, `notebook`, and `dict_import`.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::AppResult;
@@ -18,9 +18,6 @@ fn now_secs() -> i64 {
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
 }
-
-/// Managed state wrapper around the single app connection.
-pub struct Db(pub Mutex<Connection>);
 
 /// Open (creating if needed) and apply schema + seed.
 pub fn init(path: &Path) -> AppResult<Connection> {

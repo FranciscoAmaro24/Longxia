@@ -1,5 +1,6 @@
-//! Error type shared by all commands. Serializes to a plain string so the
-//! frontend receives a readable message without leaking internal detail.
+//! Error type shared by all operations. Serializes to a plain string so a host
+//! (the Tauri frontend, or the HTTP server) receives a readable message without
+//! leaking internal detail.
 
 use std::fmt;
 

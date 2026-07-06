@@ -1,3 +1,11 @@
+[workspace]
+# Nested members reusing the shared core: `core` is the library; `server` is the
+# Axum HTTP host. The root package (`app`, ".") is the Tauri host.
+members = ["core", "server"]
+# So a plain `cargo test`/`cargo build` from here covers every member (the core
+# tests live in `core`), not just the root package.
+default-members = [".", "core", "server"]
+
 [package]
 name = "app"
 version = "0.1.0"
@@ -22,12 +30,13 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Local SQLite lives in the Rust core only; the frontend never sees raw SQL.
-# `bundled` compiles SQLite from source so there is no system dependency.
+# All data, scheduling, dictionary, notebook, and AI logic lives here; the
+# Tauri commands are thin wrappers over it (and the server will reuse it too).
+longxia-core = { path = "core" }
+# The host holds the connection as managed state, so it needs the SQLite types.
+# `bundled` compiles SQLite from source so there is no system dependency; the
+# feature is unified with core's identical dependency (compiled once).
 rusqlite = { version = "0.32", features = ["bundled"] }
-# FSRS spaced-repetition scheduler (scheduling only, no training deps).
-rs-fsrs = "1.2.1"
+# Command wrappers stamp the current time before calling the core scheduler.
 chrono = "0.4"
-# HTTP client for the Claude API call (rustls to avoid a system OpenSSL dep).
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 

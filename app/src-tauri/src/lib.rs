@@ -1,22 +1,21 @@
-// Application entry point for the Tauri core.
+// Application entry point for the Tauri host.
 //
-// The database lives here as managed state; features reach it only through the
-// typed commands in `commands`. Every exposed command is an attack surface, so
-// we register them deliberately.
+// All real logic lives in the `longxia_core` crate; this binary only owns the
+// database connection as managed state and exposes the core operations as
+// typed Tauri commands. Every exposed command is an attack surface, so we
+// register them deliberately.
 
-pub mod ai;
 pub mod commands;
-pub mod db;
-pub mod dict_import;
-pub mod error;
-pub mod models;
-pub mod notebook;
-pub mod srs;
 
 use std::sync::Mutex;
 use tauri::Manager;
 
-use db::Db;
+use rusqlite::Connection;
+
+/// Managed state wrapper around the single app connection. Held behind a Mutex
+/// because Tauri commands may run concurrently; the core operations take a
+/// plain `&Connection` and stay unaware of how the host holds it.
+pub struct Db(pub Mutex<Connection>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,7 +25,7 @@ pub fn run() {
             // Store the SQLite file in the OS app-data directory.
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            let conn = db::init(&dir.join("longxia.db"))?;
+            let conn = longxia_core::db::init(&dir.join("longxia.db"))?;
             app.manage(Db(Mutex::new(conn)));
             Ok(())
         })
@@ -36,11 +35,11 @@ pub fn run() {
             commands::annotate,
             commands::get_review_queue,
             commands::review_card,
-            ai::explain,
-            notebook::get_note,
-            notebook::save_note,
-            notebook::add_insight,
-            notebook::delete_insight
+            commands::explain,
+            commands::get_note,
+            commands::save_note,
+            commands::add_insight,
+            commands::delete_insight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
