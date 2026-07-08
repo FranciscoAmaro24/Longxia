@@ -115,7 +115,37 @@ pub fn replace_hsk_from_dir(conn: &mut Connection, dir: &Path) -> AppResult<Vec<
         rows.extend(parse_band(&json, band)?);
     }
     load_words(conn, &rows)?;
-    recompute_targets(conn)
+    let stats = recompute_targets(conn)?;
+    let level = current_level(conn);
+    rebuild_deck(conn, level)?;
+    Ok(stats)
+}
+
+/// The learner's current HSK level from settings (default band 1).
+fn current_level(conn: &Connection) -> i64 {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = 'current_level'",
+        [],
+        |r| r.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|s| s.parse().ok())
+    .unwrap_or(1)
+}
+
+/// Build the review deck from the imported vocabulary: one `new` card per word
+/// at or below `level`, in band order so earlier (easier) bands are introduced
+/// first. Replaces any existing cards - importing is a setup step, so this
+/// resets review progress (and cascades old `reviews`). Returns the card count.
+pub fn rebuild_deck(conn: &Connection, level: i64) -> AppResult<usize> {
+    conn.execute("DELETE FROM cards", [])?;
+    let n = conn.execute(
+        "INSERT INTO cards (kind, ref_id, headword, state) \
+         SELECT 'word', id, simplified, 'new' FROM words \
+         WHERE hsk_level <= ?1 ORDER BY hsk_level, id",
+        [level],
+    )?;
+    Ok(n)
 }
 
 /// Replace the `words` table with `rows` and stamp `import_versions`. The whole
@@ -262,6 +292,34 @@ mod tests {
         assert_eq!(toneless("hǎo"), "hao");
         assert_eq!(toneless("lǜ"), "lu"); // ü -> u
         assert_eq!(toneless("MA"), "ma");
+    }
+
+    #[test]
+    fn rebuild_deck_makes_new_cards_per_band() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::apply(&conn).unwrap();
+        let mut rows = parse_band(SAMPLE_1, 1).unwrap(); // 爱, 八
+        rows.extend(parse_band(SAMPLE_2, 2).unwrap()); // 爱好
+        load_words(&mut conn, &rows).unwrap();
+
+        // Band 1 only: two new cards (replacing the demo deck).
+        assert_eq!(rebuild_deck(&conn, 1).unwrap(), 2);
+        let (count, new): (i64, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(SUM(state = 'new'), 0) FROM cards",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(new, 2);
+
+        // Bands 1-2: adds the band-2 word.
+        assert_eq!(rebuild_deck(&conn, 2).unwrap(), 3);
+        let has_hao: i64 = conn
+            .query_row("SELECT COUNT(*) FROM cards WHERE headword = '爱好'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(has_hao, 1);
     }
 
     #[test]

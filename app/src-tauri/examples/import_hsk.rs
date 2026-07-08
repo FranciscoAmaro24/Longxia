@@ -39,4 +39,18 @@ fn main() {
             s.level, s.words, s.characters, s.syllables
         );
     }
+
+    let level: i64 = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'current_level'",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1);
+    let cards: i64 = conn
+        .query_row("SELECT COUNT(*) FROM cards", [], |r| r.get(0))
+        .unwrap_or(0);
+    println!("review deck: {cards} cards for bands 1-{level} (all new)");
 }

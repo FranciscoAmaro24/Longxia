@@ -20,6 +20,10 @@ const MAX_QUERY_CHARS: usize = 16;
 /// Upper bound on characters annotated in one call, to bound work per request.
 const MAX_ANNOTATE_CHARS: usize = 2000;
 
+/// How many brand-new cards to surface at once, so a large HSK deck (thousands
+/// of unseen words) does not flood a session. Due cards are never capped.
+const NEW_SESSION_LIMIT: i64 = 15;
+
 /// Whether a character is a CJK ideograph worth a dictionary lookup.
 fn is_han(c: char) -> bool {
     matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0x20000..=0x2A6DF)
@@ -70,11 +74,14 @@ pub fn today_summary(conn: &Connection) -> AppResult<TodaySummary> {
         [now],
         |r| r.get(0),
     )?;
-    let new_cards: i64 = conn.query_row(
+    // Show only the new cards a session would actually introduce, not the whole
+    // unseen backlog (which can be thousands after a full HSK import).
+    let new_backlog: i64 = conn.query_row(
         "SELECT COUNT(*) FROM cards WHERE state = 'new'",
         [],
         |r| r.get(0),
     )?;
+    let new_cards = new_backlog.min(NEW_SESSION_LIMIT);
 
     let rings = vec![
         Ring { key: "char".into(), zh: "汉字".into(), learned: chr_l, target: chr_t },
@@ -192,7 +199,23 @@ fn load_stored(conn: &Connection, id: i64) -> AppResult<Option<StoredCard>> {
     .map_err(Into::into)
 }
 
+/// Resolve a headword to display pinyin + a short gloss. Prefers the curated
+/// HSK `words` row (accurate pinyin and definitions) and falls back to the
+/// CC-CEDICT `dictionary` when the word is not in the HSK set.
 fn first_sense(conn: &Connection, word: &str) -> AppResult<(Option<String>, Option<String>)> {
+    let hsk = conn
+        .query_row(
+            "SELECT pinyin, definitions_json FROM words WHERE simplified = ?1 LIMIT 1",
+            [word],
+            |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)),
+        )
+        .optional()?;
+    if let Some((pinyin, defs)) = hsk {
+        if let Some(gloss) = defs.as_deref().and_then(gloss_from_defs) {
+            return Ok((pinyin, Some(gloss)));
+        }
+    }
+
     let row = conn
         .query_row(
             "SELECT pinyin, gloss FROM dictionary WHERE simplified = ?1 LIMIT 1",
@@ -203,31 +226,72 @@ fn first_sense(conn: &Connection, word: &str) -> AppResult<(Option<String>, Opti
     Ok(row.unwrap_or((None, None)))
 }
 
-/// The review queue: due cards and new cards, with content and rating previews.
+/// Turn a `definitions_json` array (["to love", "affection", ...]) into a short
+/// gloss of the first few senses.
+fn gloss_from_defs(json: &str) -> Option<String> {
+    let defs: Vec<String> = serde_json::from_str(json).ok()?;
+    let joined = defs
+        .into_iter()
+        .filter(|d| !d.trim().is_empty())
+        .take(3)
+        .collect::<Vec<_>>()
+        .join("; ");
+    if joined.is_empty() {
+        None
+    } else {
+        Some(joined)
+    }
+}
+
+type CardRow = (i64, String, StoredCard);
+
+fn read_card_row(r: &rusqlite::Row) -> rusqlite::Result<CardRow> {
+    Ok((
+        r.get(0)?,
+        r.get(1)?,
+        StoredCard {
+            stability: r.get(2)?,
+            difficulty: r.get(3)?,
+            due: r.get(4)?,
+            reps: r.get(5)?,
+            lapses: r.get(6)?,
+            state: r.get(7)?,
+            last_review: r.get(8)?,
+        },
+    ))
+}
+
+const CARD_COLUMNS: &str =
+    "id, headword, stability, difficulty, due, reps, lapses, state, last_review";
+
+/// The review queue: all due cards (oldest first) plus a capped batch of new
+/// cards (in deck order, so earlier HSK bands come first), each with content
+/// and the four rating previews.
 pub fn review_queue(conn: &Connection, now: DateTime<Utc>) -> AppResult<Vec<ReviewCard>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, headword, stability, difficulty, due, reps, lapses, state, last_review \
-         FROM cards \
-         WHERE headword IS NOT NULL AND (state = 'new' OR (due IS NOT NULL AND due <= ?1)) \
-         ORDER BY (state = 'new') ASC, due ASC LIMIT 100",
-    )?;
-    let raw: Vec<(i64, String, StoredCard)> = stmt
-        .query_map([now.timestamp()], |r| {
-            Ok((
-                r.get(0)?,
-                r.get(1)?,
-                StoredCard {
-                    stability: r.get(2)?,
-                    difficulty: r.get(3)?,
-                    due: r.get(4)?,
-                    reps: r.get(5)?,
-                    lapses: r.get(6)?,
-                    state: r.get(7)?,
-                    last_review: r.get(8)?,
-                },
-            ))
-        })?
-        .collect::<Result<_, _>>()?;
+    let mut raw: Vec<CardRow> = Vec::new();
+
+    {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {CARD_COLUMNS} FROM cards \
+             WHERE headword IS NOT NULL AND state != 'new' AND due IS NOT NULL AND due <= ?1 \
+             ORDER BY due ASC LIMIT 100"
+        ))?;
+        let rows = stmt.query_map([now.timestamp()], read_card_row)?;
+        for row in rows {
+            raw.push(row?);
+        }
+    }
+    {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {CARD_COLUMNS} FROM cards \
+             WHERE headword IS NOT NULL AND state = 'new' \
+             ORDER BY id ASC LIMIT ?1"
+        ))?;
+        let rows = stmt.query_map([NEW_SESSION_LIMIT], read_card_row)?;
+        for row in rows {
+            raw.push(row?);
+        }
+    }
 
     let mut out = Vec::with_capacity(raw.len());
     for (id, headword, stored) in raw {
@@ -392,6 +456,45 @@ mod tests {
         conn.execute("DELETE FROM reviews", []).unwrap();
         insert(today - 2 * day);
         assert_eq!(study_streak(&conn, today).unwrap(), 0);
+    }
+
+    #[test]
+    fn review_queue_caps_new_and_uses_hsk_content() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::apply(&conn).unwrap();
+        conn.execute("DELETE FROM cards", []).unwrap(); // drop the demo deck
+        conn.execute("DELETE FROM words", []).unwrap();
+
+        // A curated HSK word carries its own pinyin + definitions.
+        conn.execute(
+            "INSERT INTO words (simplified, pinyin, definitions_json, hsk_level) \
+             VALUES ('爱', 'ài', '[\"to love\",\"affection\"]', 1)",
+            [],
+        )
+        .unwrap();
+        // The HSK word's card is inserted first (lowest id -> introduced first),
+        // then 19 more new cards -> 20 unseen total.
+        conn.execute(
+            "INSERT INTO cards (kind, headword, state) VALUES ('word', '爱', 'new')",
+            [],
+        )
+        .unwrap();
+        for i in 0..19 {
+            conn.execute(
+                "INSERT INTO cards (kind, headword, state) VALUES ('word', ?1, 'new')",
+                [format!("w{i}")],
+            )
+            .unwrap();
+        }
+
+        let q = review_queue(&conn, Utc::now()).unwrap();
+        assert_eq!(q.len(), 15); // capped, not all 20
+        assert_eq!(q[0].headword, "爱");
+        assert_eq!(q[0].pinyin.as_deref(), Some("ài")); // resolved from `words`
+        assert_eq!(q[0].gloss.as_deref(), Some("to love; affection"));
+
+        // Today mirrors the cap, not the 20-card backlog.
+        assert_eq!(today_summary(&conn).unwrap().new_cards, NEW_SESSION_LIMIT);
     }
 
     #[test]
