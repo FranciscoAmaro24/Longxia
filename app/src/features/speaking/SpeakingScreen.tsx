@@ -80,7 +80,7 @@ export function SpeakingScreen() {
         <span className={styles.en}>Speaking</span>
       </header>
 
-      <Panel label="Shadow" actions={<Tag>Level 1-3</Tag>}>
+      <Panel label="Shadow" actions={<Tag>HSK {phrase.level}</Tag>}>
         <div className={styles.switcher}>
           {PHRASES.map((p, i) => (
             <Button

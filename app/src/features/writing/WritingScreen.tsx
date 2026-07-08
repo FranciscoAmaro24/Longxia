@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import HanziWriter from "hanzi-writer";
-import { Button, Panel, Tag, TianGrid } from "../../components";
+import { Button, Panel, TianGrid } from "../../components";
 import { cn } from "../../lib/cn";
-import { CHAR_DATA, PRACTICE } from "./characters";
+import { CHAR_DATA, PRACTICE, PRACTICE_BANDS } from "./characters";
 import styles from "./WritingScreen.module.css";
 
 const SIZE = 240;
@@ -31,7 +31,8 @@ function readColors() {
  * strokes draw in the correction (red-pen) color; completion feedback is jade.
  */
 export function WritingScreen() {
-  const [char, setChar] = useState("写");
+  const [band, setBand] = useState<number>(PRACTICE_BANDS[0]);
+  const [char, setChar] = useState(PRACTICE[0].char);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const targetRef = useRef<HTMLDivElement>(null);
   const writerRef = useRef<HanziWriter | null>(null);
@@ -95,6 +96,14 @@ export function WritingScreen() {
   };
 
   const current = PRACTICE.find((p) => p.char === char);
+  const chars = PRACTICE.filter((p) => p.level === band);
+
+  // Switch bands and jump to that band's first character.
+  const selectBand = (b: number) => {
+    setBand(b);
+    const first = PRACTICE.find((p) => p.level === b);
+    if (first) setChar(first.char);
+  };
 
   return (
     <main className={styles.screen}>
@@ -107,10 +116,24 @@ export function WritingScreen() {
 
       <Panel
         label="Character"
-        actions={<Tag variant="jade">handwrite set</Tag>}
+        actions={
+          <div className={styles.bands}>
+            {PRACTICE_BANDS.map((b) => (
+              <Button
+                key={b}
+                size="sm"
+                variant={b === band ? "secondary" : "ghost"}
+                aria-pressed={b === band}
+                onClick={() => selectBand(b)}
+              >
+                HSK {b}
+              </Button>
+            ))}
+          </div>
+        }
       >
         <div className={styles.selector}>
-          {PRACTICE.map((p) => (
+          {chars.map((p) => (
             <Button
               key={p.char}
               size="sm"
