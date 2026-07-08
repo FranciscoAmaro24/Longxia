@@ -83,7 +83,38 @@ pub fn today_summary(conn: &Connection) -> AppResult<TodaySummary> {
         Ring { key: "syllable".into(), zh: "音节".into(), learned: syl_l, target: syl_t },
     ];
 
-    Ok(TodaySummary { level, rings, due, new_cards })
+    let streak = study_streak(conn, now)?;
+
+    Ok(TodaySummary { level, rings, due, new_cards, streak })
+}
+
+/// The current study streak: consecutive UTC days, counting back from today,
+/// that each have at least one logged review. The run stays "alive" if the most
+/// recent review day is today or yesterday; a fully missed day resets it to 0.
+pub fn study_streak(conn: &Connection, now: i64) -> AppResult<i64> {
+    // Distinct day numbers (epoch day = floor(unix / 86400)); integer division
+    // floors for the non-negative timestamps we store.
+    let mut stmt =
+        conn.prepare("SELECT DISTINCT reviewed_at / 86400 FROM reviews")?;
+    let days: std::collections::HashSet<i64> = stmt
+        .query_map([], |r| r.get::<_, i64>(0))?
+        .collect::<Result<_, _>>()?;
+
+    let today = now.div_euclid(86_400);
+    let mut anchor = if days.contains(&today) {
+        today
+    } else if days.contains(&(today - 1)) {
+        today - 1
+    } else {
+        return Ok(0);
+    };
+
+    let mut streak = 0;
+    while days.contains(&anchor) {
+        streak += 1;
+        anchor -= 1;
+    }
+    Ok(streak)
 }
 
 /// Dictionary lookup for a headword (typically a single tapped character).
@@ -248,6 +279,7 @@ mod tests {
         assert_eq!(s.level, 3);
         assert_eq!(s.due, 18);
         assert_eq!(s.new_cards, 6);
+        assert_eq!(s.streak, 0); // seed logs no reviews
         assert_eq!(s.rings.len(), 4);
 
         let chars = s.rings.iter().find(|r| r.key == "char").unwrap();
@@ -317,6 +349,49 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM reviews WHERE card_id = ?1", [first], |r| r.get(0))
             .unwrap();
         assert_eq!(logged, 1);
+    }
+
+    #[test]
+    fn streak_counts_consecutive_days() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::apply(&conn).unwrap();
+        conn.execute("DELETE FROM reviews", []).unwrap();
+
+        let day = 86_400i64;
+        let today = 20_000i64 * day + 500; // an arbitrary "now" mid-day
+        let insert = |secs: i64| {
+            conn.execute(
+                "INSERT INTO reviews (card_id, rating, reviewed_at) VALUES (1, 3, ?1)",
+                [secs],
+            )
+            .unwrap();
+        };
+
+        // no reviews -> 0
+        assert_eq!(study_streak(&conn, today).unwrap(), 0);
+
+        // today, yesterday, and the day before (two entries one day, to prove
+        // distinct-day counting) -> 3
+        insert(today);
+        insert(today - day);
+        insert(today - day + 10);
+        insert(today - 2 * day);
+        assert_eq!(study_streak(&conn, today).unwrap(), 3);
+
+        // a gap breaks it: nothing 3 days ago, something 4 days ago -> still 3
+        insert(today - 4 * day);
+        assert_eq!(study_streak(&conn, today).unwrap(), 3);
+
+        // if today has none but yesterday does, the run through yesterday counts
+        conn.execute("DELETE FROM reviews", []).unwrap();
+        insert(today - day);
+        insert(today - 2 * day);
+        assert_eq!(study_streak(&conn, today).unwrap(), 2);
+
+        // a fully missed day (only the day before yesterday) resets to 0
+        conn.execute("DELETE FROM reviews", []).unwrap();
+        insert(today - 2 * day);
+        assert_eq!(study_streak(&conn, today).unwrap(), 0);
     }
 
     #[test]

@@ -105,13 +105,16 @@ export function ReviewScreen() {
     (rating: Rating) => {
       if (!current || busy) return;
       setBusy(true);
+      setError(null);
       reviewCard(current.id, rating)
-        .catch((e) => setError(String(e)))
-        .finally(() => {
+        .then(() => {
+          // Only advance once the card is actually rescheduled, so a failed
+          // request keeps the card in place to retry instead of losing it.
           setReviewed((n) => n + 1);
           setIdx((i) => i + 1);
-          setBusy(false);
-        });
+        })
+        .catch((e) => setError(String(e)))
+        .finally(() => setBusy(false));
     },
     [current, busy],
   );

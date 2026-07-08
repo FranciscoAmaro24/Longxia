@@ -22,6 +22,8 @@ pub struct TodaySummary {
     pub rings: Vec<Ring>,
     pub due: i64,
     pub new_cards: i64,
+    /// Consecutive days (up to today) with at least one review logged.
+    pub streak: i64,
 }
 
 #[derive(Serialize)]

@@ -18,6 +18,8 @@ build/
 # CC-CEDICT raw data (downloaded, CC-BY-SA; not committed - see README)
 app/src-tauri/resources/cedict.txt
 app/src-tauri/resources/*.gz
+# HSK 3.0 vocabulary raw data (downloaded, MIT; not committed - see README)
+app/src-tauri/resources/hsk/
 # local dictionary preview db built by the import example
 app/src-tauri/*.db
 

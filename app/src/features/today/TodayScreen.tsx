@@ -11,6 +11,27 @@ export interface TodayScreenProps {
 const pct = (learned: number, target: number) =>
   target > 0 ? Math.round((learned / target) * 100) : 0;
 
+/** Today as "2026 · 07 · 07 · 星期二" using the local date. */
+function todayLabel(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  let weekday = "";
+  try {
+    weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(now);
+  } catch {
+    // Intl locale data unavailable; fall back to a numeric day-of-week.
+    weekday = `星期${["日", "一", "二", "三", "四", "五", "六"][now.getDay()]}`;
+  }
+  return `${y} · ${m} · ${d} · ${weekday}`;
+}
+
+/** Streak tag copy: honest when there is no streak yet. */
+function streakLabel(streak: number): string {
+  return streak > 0 ? `连续 ${streak} 天 · ${streak}-day streak` : "今天开始 · start today";
+}
+
 /**
  * Today: the home dashboard. Progress rings and the due count come from the
  * SQLite core via `get_today_summary`; the rest is static for now. Renders a
@@ -34,7 +55,7 @@ export function TodayScreen({ onNavigate }: TodayScreenProps) {
     <main className={styles.screen}>
       <header className={styles.header}>
         <div>
-          <div className={styles.eyebrow}>2026 · 07 · 05 · 星期六</div>
+          <div className={styles.eyebrow}>{todayLabel()}</div>
           <div className={styles.title}>
             <span className={styles.titleZh} lang="zh">
               继续学习
@@ -42,7 +63,7 @@ export function TodayScreen({ onNavigate }: TodayScreenProps) {
             <span className={styles.titleEn}>Keep going</span>
           </div>
         </div>
-        <Tag variant="jade">连续 7 天 · 7-day streak</Tag>
+        {summary && <Tag variant="jade">{streakLabel(summary.streak)}</Tag>}
       </header>
 
       <Panel

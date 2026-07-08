@@ -292,7 +292,7 @@ const SEED_DEV: &str = r#"
 INSERT INTO settings (key, value) VALUES ('current_level', '3');
 
 INSERT INTO progress (hsk_level, chars_learned, words_learned, grammar_learned, syllables_learned)
-VALUES (3, 674, 512, 88, 402);
+VALUES (3, 674, 512, 88, 268);
 "#;
 
 // Minimal dictionary covering the sample reader passages. Replaced wholesale

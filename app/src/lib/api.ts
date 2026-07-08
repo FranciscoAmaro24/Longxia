@@ -21,6 +21,8 @@ export interface TodaySummary {
   rings: Ring[];
   due: number;
   newCards: number;
+  /** Consecutive days (up to today) with at least one review. */
+  streak: number;
 }
 
 export function getTodaySummary(): Promise<TodaySummary> {

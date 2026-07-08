@@ -7,6 +7,40 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### 2026-07-07 - Step 1 (Phase 1): Real HSK 3.0 vocabulary + derived targets
+- **Added** `core/hsk_import.rs` (unit-tested): parses the `complete-hsk-vocabulary` dataset (MIT,
+  GF0025-2021 nine-band standard) `new/{1..7}.json` files into the curated `words` table
+  (simplified, traditional, pinyin, definitions, measure words, band), transactionally, and stamps
+  the import in `import_versions`. Band 7 is the combined 7-9 tier.
+- **Honest denominators:** `recompute_targets` derives the `hsk_targets` word/character/syllable
+  counts (cumulative per band) from the imported data, replacing the `placeholder-2025` guesses.
+  Grammar is left provisional (this vocabulary set carries no grammar-point list).
+- **Added** an offline `import_hsk` example tool (mirrors `import_cedict`), and a README section on
+  fetching + importing (raw files gitignored).
+- **Imported** the real list into the app DB: 10,969 words. The derived character progression
+  (300, 598, 899, 1199, 1499, 1799, 2970) matches the official GF0025-2021 counts (300/600/900/
+  1200/1500/1800/3000) and toneless syllables (~425) match Mandarin's inventory - validating the
+  data. Realigned the dev progress seed so no ring exceeds its (now smaller, real) target.
+- **Note:** the app tracks the 2025 exam syllabus (10,896 words) per `PLAN.md`; this GF0025-2021
+  import (10,969) is the closest openly-licensed machine-readable list and is used as the working
+  superset until the official CTI exam lists are obtained.
+- **Verified** `cargo test --workspace` (core 16 incl. 3 HSK import tests, server 7); the import ran
+  against a preview DB and the app DB with matching per-band counts.
+
+### 2026-07-07 - App review: real streak, live date, review-loop fix
+- **Real study streak.** Replaced the hardcoded "7-day streak" on Today with a value computed from
+  the `reviews` table: `ops::study_streak` counts consecutive UTC days (up to today) with at least
+  one logged review, staying "alive" if the last review was today or yesterday and resetting after
+  a fully missed day. Added to `TodaySummary` (so both the Tauri app and the server return it) and
+  unit-tested. The tag now reads "连续 N 天 · N-day streak", or "今天开始 · start today" at zero.
+- **Live date.** Today's eyebrow date was a stale hardcoded string (`2026 · 07 · 05 · 星期六`); it
+  now renders the current local date with the weekday via `Intl` (numeric fallback).
+- **Review-loop bug fix.** Rating a card advanced to the next card from a `.finally`, so a failed
+  `reviewCard` request still skipped the card and incremented the count. It now advances only in
+  `.then` (on success), leaving the card in place to retry on error, and clears the prior error.
+- **Verified:** `cargo test --workspace` (core 13 incl. the streak test, server 7) and
+  `npm run build`; end-to-end via the server the streak went 0 -> 1 after one review logged today.
+
 ### 2026-07-06 - Step 9: Run + expose (one binary serves the app and API)
 - **Static serving:** `longxia-server` optionally serves the built web app. Set `LONGXIA_WEB_DIR`
   to the `dist/` folder and it serves the SPA at `/` (with `index.html` fallback for client routes)

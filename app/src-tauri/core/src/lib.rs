@@ -8,6 +8,7 @@ pub mod ai;
 pub mod db;
 pub mod dict_import;
 pub mod error;
+pub mod hsk_import;
 pub mod models;
 pub mod notebook;
 pub mod ops;

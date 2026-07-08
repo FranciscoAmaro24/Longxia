@@ -77,6 +77,30 @@ The importer parses the CC-CEDICT format and converts numbered pinyin (`ni3 hao3
 (`nǐ hǎo`). Without this step the app falls back to a tiny built-in seed dictionary. (Bundling
 the dictionary into production builds is future work.)
 
+## HSK 3.0 vocabulary
+
+The per-level word list (and the progress denominators derived from it) comes from the
+[`complete-hsk-vocabulary`](https://github.com/drkameleon/complete-hsk-vocabulary) dataset (MIT
+licensed), which encodes the GF0025-2021 nine-band standard. The raw files (~10 MB) are **not
+committed**. To fetch the seven band files and import them:
+
+```bash
+cd app/src-tauri
+mkdir -p resources/hsk/new
+for l in 1 2 3 4 5 6 7; do
+  curl -sL "https://raw.githubusercontent.com/drkameleon/complete-hsk-vocabulary/master/wordlists/exclusive/new/$l.json" \
+    -o "resources/hsk/new/$l.json"
+done
+cargo run --example import_hsk -- resources/hsk \
+  "$HOME/Library/Application Support/com.longxia.study/longxia.db"
+```
+
+This loads 10,969 words into the `words` table (band 7 = the combined 7-9 tier) and recomputes the
+`hsk_targets` word/character/syllable denominators from the data, versioned in `import_versions`.
+The derived character counts (300, 598, 899, 1199, 1499, 1799, 2970) match the official GF0025-2021
+progression, validating the import. Grammar denominators stay provisional until an official
+grammar-point list is imported.
+
 ## AI insights (Claude)
 
 The red-pen AI insights call the Claude API from the Rust core (the key never enters the
