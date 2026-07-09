@@ -4,6 +4,7 @@
 //! same core backs both the Tauri app and the HTTP server. Nothing here
 //! depends on Tauri.
 
+pub mod accounts;
 pub mod ai;
 pub mod db;
 pub mod dict_import;

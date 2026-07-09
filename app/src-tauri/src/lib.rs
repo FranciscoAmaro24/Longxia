@@ -33,6 +33,7 @@ pub fn run() {
             commands::get_today_summary,
             commands::lookup,
             commands::annotate,
+            commands::segment,
             commands::get_review_queue,
             commands::review_card,
             commands::explain,

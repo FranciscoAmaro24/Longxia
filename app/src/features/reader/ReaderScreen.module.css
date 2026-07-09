@@ -35,29 +35,40 @@
   position: relative;
 }
 
-/* the passage is a wrapping row of ruby tokens (char over pinyin) */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* the passage is a wrapping row of words; the wider gap between words (vs the
+   tight gap between characters within a word) is what reveals segmentation */
 .passage {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  column-gap: 3px;
+  column-gap: var(--space-3);
   row-gap: var(--space-4);
 }
 
-.token {
+/* a word is a click target grouping its character cells */
+.word {
   display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/* Han tokens are the click targets */
-.tokenBtn {
+  align-items: flex-end;
+  column-gap: 3px;
   font: inherit;
   color: inherit;
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
+}
+
+/* one character over its syllable */
+.cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .char {
@@ -67,12 +78,13 @@
   border-bottom: 2px solid transparent;
   transition: border-color 100ms ease;
 }
-.tokenBtn:hover .char,
-.tokenActive .char {
+/* hover/active underlines the whole word, not a single character */
+.word:hover .char,
+.wordActive .char {
   border-bottom-color: var(--correction);
 }
 
-.tokenPunct .char {
+.punct .char {
   color: var(--ink-muted);
 }
 
@@ -84,6 +96,23 @@
   font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--ink-muted);
+}
+
+/* tone-coloring mode (opt-in): each syllable colored by its tone */
+.tone1 {
+  color: var(--tone-1);
+}
+.tone2 {
+  color: var(--tone-2);
+}
+.tone3 {
+  color: var(--tone-3);
+}
+.tone4 {
+  color: var(--tone-4);
+}
+.tone0 {
+  color: var(--tone-0);
 }
 
 .translation {

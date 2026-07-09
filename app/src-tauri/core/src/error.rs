@@ -10,6 +10,8 @@ pub enum AppError {
     State(String),
     Io(String),
     Ai(String),
+    /// Authentication/account error (bad credentials, taken email, etc.).
+    Auth(String),
 }
 
 impl fmt::Display for AppError {
@@ -19,6 +21,7 @@ impl fmt::Display for AppError {
             AppError::State(m) => write!(f, "state error: {m}"),
             AppError::Io(m) => write!(f, "io error: {m}"),
             AppError::Ai(m) => write!(f, "{m}"),
+            AppError::Auth(m) => write!(f, "{m}"),
         }
     }
 }

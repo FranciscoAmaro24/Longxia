@@ -221,6 +221,7 @@ fn api_router(state: AppState) -> Router {
         .route("/today", get(today))
         .route("/lookup", get(lookup))
         .route("/annotate", post(annotate))
+        .route("/segment", post(segment))
         .route("/review/queue", get(review_queue))
         .route("/review", post(review))
         .route("/explain", post(explain))
@@ -338,6 +339,14 @@ async fn annotate(
 ) -> Result<Response, ApiError> {
     let conn = lock(&st)?;
     Ok(Json(ops::annotate_text(&conn, &req.text)?).into_response())
+}
+
+async fn segment(
+    State(st): State<AppState>,
+    Json(req): Json<TextReq>,
+) -> Result<Response, ApiError> {
+    let conn = lock(&st)?;
+    Ok(Json(ops::segment_text(&conn, &req.text)?).into_response())
 }
 
 async fn review_queue(State(st): State<AppState>) -> Result<Response, ApiError> {

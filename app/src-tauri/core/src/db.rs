@@ -26,22 +26,105 @@ pub fn init(path: &Path) -> AppResult<Connection> {
     Ok(conn)
 }
 
-/// Enable FKs, run migrations, seed. Separated from `init` so tests and the
-/// import example can apply it to any connection.
+/// Enable FKs, run pending migrations, seed. Separated from `init` so tests and
+/// the import example can apply it to any connection.
 pub fn apply(conn: &Connection) -> AppResult<()> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
-    conn.execute_batch(SCHEMA)?;
-    migrate(conn)?;
-    seed(conn)?;
+    run_migrations(conn)?;
+    seed_reference(conn)?;
+    if dev_seed_enabled() {
+        seed_dev(conn)?;
+    }
     Ok(())
 }
 
-/// Additive migrations for databases created before a column existed.
-fn migrate(conn: &Connection) -> AppResult<()> {
+/// One forward migration. `run` is a function (not just SQL) so a step can make
+/// a decision - e.g. add a column only if an old database lacks it.
+struct Migration {
+    version: i64,
+    name: &'static str,
+    run: fn(&Connection) -> AppResult<()>,
+}
+
+/// Ordered migration history. Append new numbered steps here; never edit or
+/// reorder applied ones. Each runs once and is recorded in `schema_migrations`.
+const MIGRATIONS: &[Migration] = &[
+    Migration { version: 1, name: "base-schema", run: migrate_base_schema },
+    Migration { version: 2, name: "cards-headword", run: migrate_cards_headword },
+    Migration { version: 3, name: "accounts", run: migrate_accounts },
+];
+
+/// Apply every migration not yet recorded, in order.
+fn run_migrations(conn: &Connection) -> AppResult<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (\
+           version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL);",
+    )?;
+    for m in MIGRATIONS {
+        let applied: bool = conn
+            .query_row(
+                "SELECT 1 FROM schema_migrations WHERE version = ?1",
+                [m.version],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+        if applied {
+            continue;
+        }
+        (m.run)(conn)?;
+        conn.execute(
+            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)",
+            params![m.version, m.name, now_secs()],
+        )?;
+    }
+    Ok(())
+}
+
+/// v1: the base schema. `CREATE ... IF NOT EXISTS` so it is a no-op on databases
+/// that predate the migration framework (their tables already exist).
+fn migrate_base_schema(conn: &Connection) -> AppResult<()> {
+    conn.execute_batch(SCHEMA)?;
+    Ok(())
+}
+
+/// v2: ensure `cards.headword` exists on very old databases created before it
+/// was part of the base schema (fresh databases already have it from v1).
+fn migrate_cards_headword(conn: &Connection) -> AppResult<()> {
     if !column_exists(conn, "cards", "headword")? {
         conn.execute("ALTER TABLE cards ADD COLUMN headword TEXT", [])?;
     }
     Ok(())
+}
+
+/// v3: accounts. Users (email + Argon2 password hash) and their sessions.
+/// Per-user scoping of notes/cards/progress is a following migration.
+fn migrate_accounts(conn: &Connection) -> AppResult<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS users (\
+           id INTEGER PRIMARY KEY, \
+           email TEXT NOT NULL UNIQUE, \
+           password_hash TEXT NOT NULL, \
+           created_at INTEGER NOT NULL);\
+         CREATE TABLE IF NOT EXISTS sessions (\
+           token TEXT PRIMARY KEY, \
+           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, \
+           created_at INTEGER NOT NULL, \
+           expires_at INTEGER NOT NULL);\
+         CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);",
+    )?;
+    Ok(())
+}
+
+/// Whether to load development seed data (a mid-course progress snapshot and a
+/// starter deck). On in debug builds and when `LONGXIA_DEV_SEED` is truthy; off
+/// in release builds so a shipped/hosted app starts empty until real use.
+fn dev_seed_enabled() -> bool {
+    cfg!(debug_assertions)
+        || matches!(
+            std::env::var("LONGXIA_DEV_SEED").ok().as_deref(),
+            Some("1") | Some("true") | Some("yes")
+        )
 }
 
 fn column_exists(conn: &Connection, table: &str, column: &str) -> AppResult<bool> {
@@ -57,26 +140,43 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> AppResult<bool
     Ok(false)
 }
 
-/// Seed reference targets and, in the absence of any progress rows, a small
-/// amount of development data so the Today screen renders real computed values.
-/// Guarded so it runs at most once; remove the dev block before shipping.
-fn seed(conn: &Connection) -> AppResult<()> {
+/// Reference data every install needs: the (provisional) HSK denominators, a
+/// tiny fallback dictionary, and a default study level. Each is applied only
+/// when its table/setting is empty, so it never clobbers imported or user data.
+fn seed_reference(conn: &Connection) -> AppResult<()> {
     let targets: i64 =
         conn.query_row("SELECT COUNT(*) FROM hsk_targets", [], |r| r.get(0))?;
     if targets == 0 {
         conn.execute_batch(SEED_TARGETS)?;
     }
 
-    let progress: i64 =
-        conn.query_row("SELECT COUNT(*) FROM progress", [], |r| r.get(0))?;
-    if progress == 0 {
-        conn.execute_batch(SEED_DEV)?;
-    }
-
     let dict: i64 =
         conn.query_row("SELECT COUNT(*) FROM dictionary", [], |r| r.get(0))?;
     if dict == 0 {
         conn.execute_batch(SEED_DICT)?;
+    }
+
+    // Default study band for a fresh, non-dev install (dev seeding may raise it).
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('current_level', '1')",
+        [],
+    )?;
+    Ok(())
+}
+
+/// Development-only seed: a mid-course progress snapshot (so the dashboard shows
+/// real computed values) and a starter review deck. Bootstrapped once, when no
+/// progress exists, so it never overwrites a real learner's level or progress.
+fn seed_dev(conn: &Connection) -> AppResult<()> {
+    let progress: i64 =
+        conn.query_row("SELECT COUNT(*) FROM progress", [], |r| r.get(0))?;
+    if progress == 0 {
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('current_level', '3') \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [],
+        )?;
+        conn.execute_batch(SEED_DEV_PROGRESS)?;
     }
 
     seed_review_cards(conn)?;
@@ -134,6 +234,37 @@ fn seed_review_cards(conn: &Connection) -> AppResult<()> {
         [REVIEW_SEED_VERSION],
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrations_apply_once_and_are_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        apply(&conn).unwrap();
+        apply(&conn).unwrap(); // re-applying must be a no-op
+
+        let recorded: i64 = conn
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(recorded, MIGRATIONS.len() as i64);
+
+        // base schema is present and dev-seeded (tests build with debug asserts)
+        let cards: i64 = conn
+            .query_row("SELECT COUNT(*) FROM cards", [], |r| r.get(0))
+            .unwrap();
+        assert!(cards > 0);
+        let level: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'current_level'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(level, "3");
+    }
 }
 
 const SCHEMA: &str = r#"
@@ -286,11 +417,9 @@ INSERT INTO hsk_targets (level, syllables, characters, words, grammar, source) V
   (9, 1110, 3000, 10896, 572, 'placeholder-2025');
 "#;
 
-// Development-only seed. Sets the current level, a progress snapshot, and a
-// handful of cards so due/new counts are non-zero. Remove before shipping.
-const SEED_DEV: &str = r#"
-INSERT INTO settings (key, value) VALUES ('current_level', '3');
-
+// Development-only progress snapshot so the dashboard renders non-zero rings.
+// The current level is set alongside this in `seed_dev`. Dev-only.
+const SEED_DEV_PROGRESS: &str = r#"
 INSERT INTO progress (hsk_level, chars_learned, words_learned, grammar_learned, syllables_learned)
 VALUES (3, 674, 512, 88, 268);
 "#;

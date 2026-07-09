@@ -62,6 +62,23 @@ export function annotate(text: string): Promise<Annotated[]> {
   });
 }
 
+export interface SegToken {
+  text: string;
+  /** Space-separated syllables for the whole token, or null. */
+  pinyin: string | null;
+  /** True for Han tokens worth grouping and tapping. */
+  word: boolean;
+}
+
+/** Segment a passage into words (multi-character words share one pinyin). */
+export function segment(text: string): Promise<SegToken[]> {
+  return call<SegToken[]>({
+    command: "segment",
+    args: { text },
+    http: { method: "POST", path: "/api/segment", body: { text } },
+  });
+}
+
 export interface ReviewCard {
   id: number;
   headword: string;

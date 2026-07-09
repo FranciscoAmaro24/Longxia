@@ -10,7 +10,9 @@ use rusqlite::Connection;
 use tauri::State;
 
 use longxia_core::error::{AppError, AppResult};
-use longxia_core::models::{Annotated, DictEntry, Insight, Note, ReviewCard, ReviewResult, TodaySummary};
+use longxia_core::models::{
+    Annotated, DictEntry, Insight, Note, ReviewCard, ReviewResult, SegToken, TodaySummary,
+};
 use longxia_core::{ai, notebook, ops};
 
 use crate::Db;
@@ -38,6 +40,12 @@ pub fn lookup(db: State<'_, Db>, query: String) -> AppResult<Vec<DictEntry>> {
 pub fn annotate(db: State<'_, Db>, text: String) -> AppResult<Vec<Annotated>> {
     let conn = lock(&db)?;
     ops::annotate_text(&conn, &text)
+}
+
+#[tauri::command]
+pub fn segment(db: State<'_, Db>, text: String) -> AppResult<Vec<SegToken>> {
+    let conn = lock(&db)?;
+    ops::segment_text(&conn, &text)
 }
 
 #[tauri::command]

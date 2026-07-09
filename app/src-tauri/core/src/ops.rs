@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{AppError, AppResult};
-use crate::models::{Annotated, DictEntry, ReviewCard, ReviewResult, Ring, TodaySummary};
+use crate::models::{Annotated, DictEntry, ReviewCard, ReviewResult, Ring, SegToken, TodaySummary};
 use crate::srs::{self, StoredCard};
 
 /// Longest query we will look up. The reader taps single characters, so this
@@ -19,6 +19,9 @@ const MAX_QUERY_CHARS: usize = 16;
 
 /// Upper bound on characters annotated in one call, to bound work per request.
 const MAX_ANNOTATE_CHARS: usize = 2000;
+
+/// Longest word (in characters) the segmenter will try to match at a position.
+const MAX_WORD_LEN: usize = 6;
 
 /// How many brand-new cards to surface at once, so a large HSK deck (thousands
 /// of unseen words) does not flood a session. Due cards are never capped.
@@ -174,6 +177,72 @@ pub fn annotate_text(conn: &Connection, text: &str) -> AppResult<Vec<Annotated>>
             None
         };
         out.push(Annotated { text: ch.to_string(), pinyin });
+    }
+    Ok(out)
+}
+
+/// Pinyin for a whole word: prefer the curated HSK `words` row, else CC-CEDICT.
+fn word_pinyin(conn: &Connection, word: &str) -> AppResult<Option<String>> {
+    let hsk = conn
+        .query_row(
+            "SELECT pinyin FROM words WHERE simplified = ?1 AND pinyin IS NOT NULL LIMIT 1",
+            [word],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten();
+    if hsk.is_some() {
+        return Ok(hsk);
+    }
+    let dict = conn
+        .query_row(
+            "SELECT pinyin FROM dictionary WHERE simplified = ?1 AND pinyin IS NOT NULL LIMIT 1",
+            [word],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(dict)
+}
+
+/// Segment a passage into word tokens via forward maximum matching over the
+/// dictionary: at each position take the longest run of Han characters (up to
+/// `MAX_WORD_LEN`) that resolves to a dictionary word, so multi-character words
+/// share one pinyin. Punctuation and unknown single characters pass through as
+/// their own tokens. Bounded to `MAX_ANNOTATE_CHARS`.
+pub fn segment_text(conn: &Connection, text: &str) -> AppResult<Vec<SegToken>> {
+    let chars: Vec<char> = text.chars().take(MAX_ANNOTATE_CHARS).collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        if !is_han(ch) {
+            out.push(SegToken { text: ch.to_string(), pinyin: None, word: false });
+            i += 1;
+            continue;
+        }
+
+        let max_len = MAX_WORD_LEN.min(chars.len() - i);
+        let mut matched: Option<(String, usize, String)> = None;
+        for len in (1..=max_len).rev() {
+            let cand: String = chars[i..i + len].iter().collect();
+            if let Some(py) = word_pinyin(conn, &cand)? {
+                matched = Some((cand, len, py));
+                break;
+            }
+        }
+
+        match matched {
+            Some((cand, len, py)) => {
+                out.push(SegToken { text: cand, pinyin: Some(py), word: true });
+                i += len;
+            }
+            None => {
+                // A Han character with no dictionary entry: still tappable.
+                out.push(SegToken { text: ch.to_string(), pinyin: None, word: true });
+                i += 1;
+            }
+        }
     }
     Ok(out)
 }
@@ -456,6 +525,33 @@ mod tests {
         conn.execute("DELETE FROM reviews", []).unwrap();
         insert(today - 2 * day);
         assert_eq!(study_streak(&conn, today).unwrap(), 0);
+    }
+
+    #[test]
+    fn segment_uses_longest_dictionary_match() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::apply(&conn).unwrap();
+        // A multi-character word so maximum matching has a longer run to grab.
+        conn.execute(
+            "INSERT INTO dictionary (simplified, pinyin, gloss) VALUES ('图书馆', 'tú shū guǎn', 'library')",
+            [],
+        )
+        .unwrap();
+
+        let toks = segment_text(&conn, "去图书馆。").unwrap();
+        assert_eq!(toks.len(), 3); // 去 | 图书馆 | 。
+
+        assert_eq!(toks[0].text, "去");
+        assert_eq!(toks[0].pinyin.as_deref(), Some("qù"));
+        assert!(toks[0].word);
+
+        assert_eq!(toks[1].text, "图书馆");
+        assert_eq!(toks[1].pinyin.as_deref(), Some("tú shū guǎn"));
+        assert!(toks[1].word);
+
+        assert_eq!(toks[2].text, "。");
+        assert!(toks[2].pinyin.is_none());
+        assert!(!toks[2].word);
     }
 
     #[test]

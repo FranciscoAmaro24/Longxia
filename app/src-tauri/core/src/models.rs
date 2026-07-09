@@ -44,6 +44,19 @@ pub struct Annotated {
     pub pinyin: Option<String>,
 }
 
+/// A segmented token: a whole word (one or more characters that share one
+/// dictionary pinyin) or a single character/punctuation. `word` marks tokens
+/// worth a dictionary lookup (Han text), so the reader can group and tap them.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SegToken {
+    pub text: String,
+    /// Space-separated syllables for the whole token, or None (punctuation /
+    /// unknown).
+    pub pinyin: Option<String>,
+    pub word: bool,
+}
+
 /// A card in the review queue, with content and the four rating previews
 /// (seconds until due for Again / Hard / Good / Easy).
 #[derive(Serialize)]
