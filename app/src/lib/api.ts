@@ -7,7 +7,8 @@
  */
 import { call } from "./transport";
 
-export { isTauri, setApiToken, hasApiToken } from "./transport";
+export { isTauri, setApiToken, hasApiToken, signup, login, logout } from "./transport";
+export type { AuthResult } from "./transport";
 
 export interface Ring {
   key: string;

@@ -18,34 +18,35 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Shared-token authentication. `token: None` disables auth (local dev only);
-/// the caller is responsible for refusing that mode on a non-local bind.
+/// Signup invite code. With accounts, per-request auth is by session token; this
+/// shared secret instead gates account creation so strangers who reach an
+/// exposed instance cannot register. `None` means open signup (local dev only);
+/// the caller refuses that on a non-local bind.
 pub struct Auth {
-    token: Option<String>,
+    invite: Option<String>,
 }
 
 impl Auth {
-    pub fn new(token: Option<String>) -> Self {
-        Self { token }
+    pub fn new(invite: Option<String>) -> Self {
+        Self { invite }
     }
 
-    /// Whether auth is turned off (no token configured).
-    pub fn disabled(&self) -> bool {
-        self.token.is_none()
+    /// Whether signup is open (no invite code configured).
+    pub fn open_signup(&self) -> bool {
+        self.invite.is_none()
     }
 
-    /// Validate an `Authorization` header value (e.g. `Bearer <token>`).
-    /// Returns true when auth is disabled, or the bearer token matches.
-    pub fn check(&self, header: Option<&str>) -> bool {
-        let expected = match &self.token {
+    /// Whether a provided code may create an account. True when signup is open,
+    /// or the code matches the configured invite (constant-time).
+    pub fn check_invite(&self, provided: Option<&str>) -> bool {
+        let expected = match &self.invite {
             None => return true,
-            Some(t) => t,
+            Some(code) => code,
         };
-        let bearer = match header.and_then(|h| h.strip_prefix("Bearer ")) {
-            Some(b) => b.trim(),
-            None => return false,
-        };
-        ct_eq(bearer.as_bytes(), expected.as_bytes())
+        match provided {
+            Some(p) => ct_eq(p.trim().as_bytes(), expected.as_bytes()),
+            None => false,
+        }
     }
 }
 
@@ -138,22 +139,21 @@ mod tests {
     }
 
     #[test]
-    fn auth_disabled_allows_everything() {
+    fn open_signup_allows_any_invite() {
         let auth = Auth::new(None);
-        assert!(auth.disabled());
-        assert!(auth.check(None));
-        assert!(auth.check(Some("anything")));
+        assert!(auth.open_signup());
+        assert!(auth.check_invite(None));
+        assert!(auth.check_invite(Some("anything")));
     }
 
     #[test]
-    fn auth_requires_exact_bearer_token() {
+    fn invite_must_match_when_configured() {
         let auth = Auth::new(Some("s3cret".into()));
-        assert!(!auth.disabled());
-        assert!(auth.check(Some("Bearer s3cret")));
-        assert!(!auth.check(Some("Bearer wrong")));
-        assert!(!auth.check(Some("s3cret"))); // missing scheme
-        assert!(!auth.check(Some("Basic s3cret"))); // wrong scheme
-        assert!(!auth.check(None));
+        assert!(!auth.open_signup());
+        assert!(auth.check_invite(Some("s3cret")));
+        assert!(auth.check_invite(Some(" s3cret "))); // trimmed
+        assert!(!auth.check_invite(Some("wrong")));
+        assert!(!auth.check_invite(None));
     }
 
     #[test]

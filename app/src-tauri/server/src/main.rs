@@ -33,7 +33,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::{
-    extract::{DefaultBodyLimit, Path as AxPath, Query, Request, State},
+    extract::{DefaultBodyLimit, Extension, Path as AxPath, Query, Request, State},
     http::{header, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -45,8 +45,15 @@ use serde::Deserialize;
 use tower_http::services::{ServeDir, ServeFile};
 
 use longxia_core::error::AppError;
-use longxia_core::{ai, notebook, ops};
+use longxia_core::{accounts, ai, notebook, ops};
 use security::{AiLimiter, Auth, LimitError};
+
+/// The authenticated user for a request, put in extensions by `require_session`.
+#[derive(Clone)]
+struct AuthCtx {
+    user_id: i64,
+    token: String,
+}
 
 /// Largest request body we accept. Core caps text at 2000 chars; this bounds the
 /// bytes before parsing so a huge payload is rejected up front.
@@ -90,6 +97,7 @@ impl From<AppError> for ApiError {
         // bad input) come when the core error type carries that distinction.
         let status = match e {
             AppError::Ai(_) => StatusCode::BAD_GATEWAY,
+            AppError::Auth(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         ApiError { status, message: e.to_string() }
@@ -117,31 +125,33 @@ async fn main() {
 
     let addr = std::env::var("LONGXIA_ADDR").unwrap_or_else(|_| "127.0.0.1:8787".into());
 
-    // --- Auth: fail closed. ---
-    let token = std::env::var("LONGXIA_TOKEN").ok().filter(|t| !t.is_empty());
-    let allow_no_auth = env_flag("LONGXIA_ALLOW_NO_AUTH");
-    if token.is_none() {
-        if allow_no_auth {
+    // --- Signup gate: fail closed. Data routes always require a session; this
+    // invite code (LONGXIA_TOKEN) gates account creation so strangers who reach
+    // an exposed instance cannot register. ---
+    let invite = std::env::var("LONGXIA_TOKEN").ok().filter(|t| !t.is_empty());
+    let allow_open_signup = env_flag("LONGXIA_ALLOW_NO_AUTH");
+    if invite.is_none() {
+        if allow_open_signup {
             eprintln!(
-                "WARNING: LONGXIA_ALLOW_NO_AUTH set - the API is UNAUTHENTICATED. Never do this on \
-                 an exposed address."
+                "WARNING: LONGXIA_ALLOW_NO_AUTH set - signup is OPEN. Anyone who can reach the URL \
+                 can create an account. Never do this on an exposed address."
             );
         } else if is_local_addr(&addr) {
             eprintln!(
-                "warning: no LONGXIA_TOKEN set; running open on {addr} (local only). Set a token \
-                 before binding to a non-local address."
+                "warning: no LONGXIA_TOKEN (invite code) set; signup is open on {addr} (local only). \
+                 Set one before binding to a non-local address."
             );
         } else {
             eprintln!(
-                "refusing to start: LONGXIA_TOKEN is not set and {addr} is not local. Set a token, \
-                 or set LONGXIA_ALLOW_NO_AUTH=1 to override (not recommended)."
+                "refusing to start: LONGXIA_TOKEN (invite code) is not set and {addr} is not local. \
+                 Set one, or set LONGXIA_ALLOW_NO_AUTH=1 to allow open signup (not recommended)."
             );
             std::process::exit(1);
         }
     }
-    if let Some(t) = &token {
+    if let Some(t) = &invite {
         if t.len() < 16 {
-            eprintln!("warning: LONGXIA_TOKEN is short; use at least 32 random characters.");
+            eprintln!("warning: LONGXIA_TOKEN (invite code) is short; use at least 32 random characters.");
         }
     }
 
@@ -165,7 +175,7 @@ async fn main() {
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         anthropic_key: Arc::new(std::env::var("ANTHROPIC_API_KEY").ok().filter(|k| !k.is_empty())),
-        auth: Arc::new(Auth::new(token)),
+        auth: Arc::new(Auth::new(invite)),
         ai_limiter: Arc::new(AiLimiter::new(per_min, per_day)),
     };
     if state.anthropic_key.is_none() {
@@ -176,8 +186,8 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("bind {addr}: {e}"));
     println!(
-        "longxia-server listening on http://{addr} (db: {db_path}, auth: {}, web: {})",
-        if state.auth.disabled() { "OFF" } else { "on" },
+        "longxia-server listening on http://{addr} (db: {db_path}, signup: {}, web: {})",
+        if state.auth.open_signup() { "OPEN" } else { "invite-only" },
         web_dir.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "API only".into()),
     );
 
@@ -213,11 +223,18 @@ fn app(state: AppState, web_dir: Option<PathBuf>) -> Router {
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 
-/// The `/api` sub-router. Paths are relative (nested under `/api`). Everything
-/// except `health` requires a valid token. Its own 404 fallback keeps unknown
-/// `/api/*` paths from falling through to the SPA.
+/// The `/api` sub-router. `health`, `auth/signup`, and `auth/login` are public;
+/// everything else requires a valid session (bearer token). Its own 404 fallback
+/// keeps unknown `/api/*` paths from falling through to the SPA.
 fn api_router(state: AppState) -> Router {
+    let public = Router::new()
+        .route("/health", get(health))
+        .route("/auth/signup", post(signup))
+        .route("/auth/login", post(login));
+
     let protected = Router::new()
+        .route("/auth/me", get(me))
+        .route("/auth/logout", post(logout))
         .route("/today", get(today))
         .route("/lookup", get(lookup))
         .route("/annotate", post(annotate))
@@ -228,10 +245,10 @@ fn api_router(state: AppState) -> Router {
         .route("/note", get(get_note).put(save_note))
         .route("/note/insight", post(add_insight))
         .route("/note/insight/{id}", delete(delete_insight))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_session));
 
     Router::new()
-        .route("/health", get(health))
+        .merge(public)
         .merge(protected)
         .with_state(state)
         .fallback(api_not_found)
@@ -243,25 +260,43 @@ async fn api_not_found() -> Response {
 
 // --- Middleware ---
 
-/// Reject any request whose bearer token does not match. Runs only on the
-/// protected routes; `/api/health` is exempt so a monitor can probe liveness.
-async fn require_auth(State(st): State<AppState>, req: Request, next: Next) -> Response {
-    let header_ok = {
-        let value = req
-            .headers()
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok());
-        st.auth.check(value)
+/// Require a valid session: resolve the bearer token to a user id, stash it in
+/// request extensions for handlers, or reject with 401. The DB lock is released
+/// before the downstream await, so the handler future stays `Send`.
+async fn require_session(State(st): State<AppState>, mut req: Request, next: Next) -> Response {
+    let token = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(|t| t.trim().to_string());
+
+    let user_id = match &token {
+        Some(t) => {
+            let conn = match st.db.lock() {
+                Ok(c) => c,
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "lock poisoned").into_response()
+                }
+            };
+            let resolved = accounts::session_user(&conn, t).ok().flatten();
+            drop(conn);
+            resolved
+        }
+        None => None,
     };
-    if header_ok {
-        next.run(req).await
-    } else {
-        (
+
+    match (user_id, token) {
+        (Some(user_id), Some(token)) => {
+            req.extensions_mut().insert(AuthCtx { user_id, token });
+            next.run(req).await
+        }
+        _ => (
             StatusCode::UNAUTHORIZED,
             [(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"))],
             Json(serde_json::json!({ "error": "unauthorized" })),
         )
-            .into_response()
+            .into_response(),
     }
 }
 
@@ -308,6 +343,69 @@ async fn log_mw(req: Request, next: Next) -> Response {
 
 async fn health() -> &'static str {
     "ok"
+}
+
+// --- Auth ---
+
+#[derive(Deserialize)]
+struct SignupReq {
+    email: String,
+    password: String,
+    #[serde(default)]
+    invite: Option<String>,
+}
+
+async fn signup(
+    State(st): State<AppState>,
+    Json(req): Json<SignupReq>,
+) -> Result<Response, ApiError> {
+    if !st.auth.check_invite(req.invite.as_deref()) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "A valid invite code is required to sign up.",
+        ));
+    }
+    let conn = lock(&st)?;
+    let uid = accounts::create_user(&conn, &req.email, &req.password)?;
+    let token = accounts::create_session(&conn, uid)?;
+    let email = accounts::user_email(&conn, uid)?.unwrap_or_default();
+    Ok(Json(serde_json::json!({ "token": token, "email": email })).into_response())
+}
+
+#[derive(Deserialize)]
+struct LoginReq {
+    email: String,
+    password: String,
+}
+
+async fn login(
+    State(st): State<AppState>,
+    Json(req): Json<LoginReq>,
+) -> Result<Response, ApiError> {
+    let conn = lock(&st)?;
+    let token = accounts::login(&conn, &req.email, &req.password)?;
+    let email = accounts::session_user(&conn, &token)?
+        .and_then(|uid| accounts::user_email(&conn, uid).ok().flatten())
+        .unwrap_or_default();
+    Ok(Json(serde_json::json!({ "token": token, "email": email })).into_response())
+}
+
+async fn me(
+    State(st): State<AppState>,
+    Extension(ctx): Extension<AuthCtx>,
+) -> Result<Response, ApiError> {
+    let conn = lock(&st)?;
+    let email = accounts::user_email(&conn, ctx.user_id)?.unwrap_or_default();
+    Ok(Json(serde_json::json!({ "email": email })).into_response())
+}
+
+async fn logout(
+    State(st): State<AppState>,
+    Extension(ctx): Extension<AuthCtx>,
+) -> Result<StatusCode, ApiError> {
+    let conn = lock(&st)?;
+    accounts::logout(&conn, &ctx.token)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn today(State(st): State<AppState>) -> Result<Response, ApiError> {

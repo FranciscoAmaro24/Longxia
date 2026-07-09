@@ -43,7 +43,7 @@
 }
 
 .input {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   padding: var(--space-3);
   background: var(--paper-sunken);
@@ -57,7 +57,14 @@
   outline-offset: 1px;
 }
 
+.error {
+  color: var(--correction);
+  font-size: var(--text-sm);
+}
+
 .actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }

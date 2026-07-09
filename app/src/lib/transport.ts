@@ -116,6 +116,55 @@ async function httpCall<T>(spec: CallSpec<T>): Promise<T> {
   return spec.fromHttp ? spec.fromHttp(raw) : (raw as T);
 }
 
+// --- Accounts (web transport only; the Tauri app talks to the local core) ---
+
+export interface AuthResult {
+  email: string;
+}
+
+async function authRequest(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<AuthResult> {
+  const res = await fetch(API_BASE + path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw await errorMessage(res);
+  }
+  const data = (await res.json()) as { token: string; email: string };
+  setApiToken(data.token); // subsequent requests carry this session token
+  return { email: data.email };
+}
+
+export function signup(
+  email: string,
+  password: string,
+  invite?: string,
+): Promise<AuthResult> {
+  return authRequest("/api/auth/signup", { email, password, invite: invite || undefined });
+}
+
+export function login(email: string, password: string): Promise<AuthResult> {
+  return authRequest("/api/auth/login", { email, password });
+}
+
+/** End the current session on the server, then clear the local token. */
+export async function logout(): Promise<void> {
+  const token = authToken();
+  try {
+    await fetch(API_BASE + "/api/auth/logout", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+  } catch {
+    // Best effort; clear locally regardless.
+  }
+  setApiToken(null);
+}
+
 async function errorMessage(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: unknown };
